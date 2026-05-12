@@ -49,7 +49,28 @@ export default function Settings() {
   }, [settings]);
 
   const handleSave = async () => {
-    await updateSettings.mutateAsync(form);
+    // Only send fields accepted by the backend Zod schema
+    // Convert null values to undefined so Zod optional() accepts them
+    const allowedFields = [
+      "storeName", "storeNameEn", "storePhone", "storeEmail",
+      "storeAddress", "storeAddressEn", "storeLogo",
+      "taxNumber", "taxRate", "currency", "currencySymbol",
+      "invoiceNote", "invoiceNoteEn",
+      "whatsappEnabled", "whatsappInstance", "whatsappApiKey", "whatsappApiBase", "whatsappTemplate",
+      "myfatoorahEnabled", "myfatoorahToken", "myfatoorahEnv", "myfatoorahSupplier",
+      "priceIncludesTax",
+    ];
+    const payload: any = {};
+    for (const key of allowedFields) {
+      const val = form[key];
+      // Skip null/undefined - Zod optional() expects undefined not null
+      if (val !== undefined && val !== null) payload[key] = val;
+    }
+    try {
+      await updateSettings.mutateAsync(payload);
+    } catch (err: any) {
+      toast.error(isAr ? `فشل الحفظ: ${err?.message || "خطأ غير متوقع"}` : `Save failed: ${err?.message || "Unexpected error"}`);
+    }
   };
 
   const handleWarehouseSubmit = async () => {
@@ -121,10 +142,7 @@ export default function Settings() {
                   <Label>{isAr ? "رمز العملة" : "Currency Symbol"}</Label>
                   <Input value={form.currencySymbol || "ر.س"} onChange={e => setForm((f: any) => ({ ...f, currencySymbol: e.target.value }))} />
                 </div>
-                <div className="space-y-1">
-                  <Label>{isAr ? "حد تنبيه المخزون" : "Low Stock Alert"}</Label>
-                  <Input type="number" value={form.lowStockThreshold || "5"} onChange={e => setForm((f: any) => ({ ...f, lowStockThreshold: parseInt(e.target.value) }))} dir="ltr" />
-                </div>
+
                 <div className="col-span-2 space-y-1">
                   <Label>{isAr ? "العنوان" : "Address"}</Label>
                   <Textarea value={form.storeAddress || ""} onChange={e => setForm((f: any) => ({ ...f, storeAddress: e.target.value }))} rows={2} />

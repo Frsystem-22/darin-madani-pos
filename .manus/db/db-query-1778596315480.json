@@ -1,0 +1,17 @@
+{
+  "query": "SELECT taxNumber, taxRate, invoiceNote, priceIncludesTax, storeName FROM settings LIMIT 1;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway06.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3hVUzgoV1qgXfsm.53fe60abead7 --database GuiQ96KiLevK2WuhVmj7UT --execute SELECT taxNumber, taxRate, invoiceNote, priceIncludesTax, storeName FROM settings LIMIT 1;",
+  "rows": [
+    {
+      "taxNumber": "NULL",
+      "taxRate": "15.00",
+      "invoiceNote": "NULL",
+      "priceIncludesTax": "0",
+      "storeName": "شركة دي إم فاشن هاوس"
+    }
+  ],
+  "messages": [],
+  "stdout": "taxNumber\ttaxRate\tinvoiceNote\tpriceIncludesTax\tstoreName\nNULL\t15.00\tNULL\t0\tشركة دي إم فاشن هاوس\n",
+  "stderr": "",
+  "execution_time_ms": 1875
+}
