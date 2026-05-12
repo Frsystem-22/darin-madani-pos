@@ -38,7 +38,7 @@ export default function Settings() {
   const [editWarehouse, setEditWarehouse] = useState<any>(null);
   const [warehouseForm, setWarehouseForm] = useState({ name: "", nameEn: "", description: "" });
   const [showCategoryDialog, setShowCategoryDialog] = useState(false);
-  const [categoryForm, setCategoryForm] = useState({ name: "", nameEn: "", color: "#8B7355" });
+  const [categoryForm, setCategoryForm] = useState({ name: "", nameEn: "" });
   const [showDiscountDialog, setShowDiscountDialog] = useState(false);
   const [editDiscount, setEditDiscount] = useState<any>(null);
   const [discountForm, setDiscountForm] = useState({ name: "", nameEn: "", type: "percentage" as "percentage" | "fixed", value: "", minPurchase: "", maxUses: "", isActive: true, startDate: "", endDate: "" });
@@ -111,6 +111,10 @@ export default function Settings() {
                 <div className="space-y-1">
                   <Label>{isAr ? "نسبة الضريبة (%)" : "Tax Rate (%)"}</Label>
                   <Input type="number" value={form.taxRate || "15"} onChange={e => setForm((f: any) => ({ ...f, taxRate: e.target.value }))} dir="ltr" />
+                </div>
+                <div className="space-y-1 flex items-center gap-2 pt-5">
+                  <Switch checked={form.priceIncludesTax || false} onCheckedChange={v => setForm((f: any) => ({ ...f, priceIncludesTax: v }))} />
+                  <Label className="cursor-pointer">{isAr ? "الأسعار شاملة الضريبة" : "Prices include tax"}</Label>
                 </div>
                 <div className="space-y-1">
                   <Label>{isAr ? "رمز العملة" : "Currency Symbol"}</Label>
@@ -253,7 +257,7 @@ export default function Settings() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-base">{isAr ? "تصنيفات المنتجات" : "Product Categories"}</CardTitle>
-              <Button size="sm" className="gap-1" onClick={() => { setCategoryForm({ name: "", nameEn: "", color: "#8B7355" }); setShowCategoryDialog(true); }}>
+              <Button size="sm" className="gap-1" onClick={() => { setCategoryForm({ name: "", nameEn: "" }); setShowCategoryDialog(true); }}>
                 <Plus className="h-3 w-3" />{isAr ? "إضافة" : "Add"}
               </Button>
             </CardHeader>
@@ -263,7 +267,6 @@ export default function Settings() {
                   <TableRow>
                     <TableHead>{isAr ? "الاسم" : "Name"}</TableHead>
                     <TableHead>{isAr ? "الاسم (إنجليزي)" : "Name (EN)"}</TableHead>
-                    <TableHead>{isAr ? "اللون" : "Color"}</TableHead>
                     <TableHead>{t("common.actions")}</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -272,12 +275,6 @@ export default function Settings() {
                     <TableRow key={c.id}>
                       <TableCell className="font-medium">{c.name}</TableCell>
                       <TableCell className="text-muted-foreground">{c.nameEn || "-"}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <div className="w-4 h-4 rounded-full border" style={{ backgroundColor: c.color || "#8B7355" }} />
-                          <span className="text-xs text-muted-foreground">{c.color}</span>
-                        </div>
-                      </TableCell>
                       <TableCell>
                         <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteCategory.mutate({ id: c.id })}>
                           <Trash2 className="h-3 w-3" />
@@ -366,7 +363,6 @@ export default function Settings() {
           <div className="space-y-3">
             <div className="space-y-1"><Label>{isAr ? "الاسم (عربي)" : "Name (Arabic)"}</Label><Input value={categoryForm.name} onChange={e => setCategoryForm(f => ({ ...f, name: e.target.value }))} /></div>
             <div className="space-y-1"><Label>{isAr ? "الاسم (إنجليزي)" : "Name (English)"}</Label><Input value={categoryForm.nameEn} onChange={e => setCategoryForm(f => ({ ...f, nameEn: e.target.value }))} dir="ltr" /></div>
-            <div className="space-y-1"><Label>{isAr ? "اللون" : "Color"}</Label><Input type="color" value={categoryForm.color} onChange={e => setCategoryForm(f => ({ ...f, color: e.target.value }))} /></div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCategoryDialog(false)}>{t("common.cancel")}</Button>

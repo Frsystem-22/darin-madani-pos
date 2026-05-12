@@ -1,10 +1,11 @@
 import { z } from "zod";
+import { sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import {
   getInvoices, getInvoiceById, getInvoiceByToken, createInvoice,
   updateInvoice, generateInvoiceNumber, getReturns, getReturnById,
   createReturn, generateReturnNumber, getSettings, upsertProductStock,
-  addStockMovement, updateCustomer, getCustomerById
+  addStockMovement, updateCustomer, getCustomerById, getDb
 } from "../db";
 import { protectedProcedure, publicProcedure, router } from "../_core/trpc";
 import { nanoid } from "nanoid";
@@ -123,6 +124,10 @@ export const invoicesRouter = router({
     taxAmount: z.string().optional(),
     total: z.string(),
     paymentMethod: z.enum(["cash", "card", "transfer", "electronic", "mixed"]).optional(),
+    paymentSplits: z.array(z.object({
+      method: z.enum(["cash", "card", "transfer", "electronic"]),
+      amount: z.string(),
+    })).optional(),
     notes: z.string().optional(),
     origin: z.string().optional(),
   })).mutation(async ({ input, ctx }) => {
@@ -154,6 +159,21 @@ export const invoicesRouter = router({
 
     const id = await createInvoice(invoiceData as any, input.items as any);
     if (!id) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+
+    // Save payment splits for mixed payments
+    if (input.paymentMethod === "mixed" && input.paymentSplits && input.paymentSplits.length > 0) {
+      const db = await getDb();
+      if (db) {
+        for (const split of input.paymentSplits) {
+          if (parseFloat(split.amount) > 0) {
+            const invoiceId = id;
+            const method = split.method;
+            const amount = split.amount;
+            await db.execute(sql`INSERT INTO invoice_payments (invoiceId, method, amount, createdAt) VALUES (${invoiceId}, ${method}, ${amount}, NOW())`);
+          }
+        }
+      }
+    }
 
     // Deduct stock
     const warehouseId = input.warehouseId || 1;

@@ -15,7 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Plus, Search, Edit, Trash2, Package, Barcode, Upload,
-  ArrowUpDown, TrendingDown, Warehouse, RefreshCw, Eye
+  ArrowUpDown, TrendingDown, Warehouse, RefreshCw, Eye, X, ImagePlus
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import BarcodeLabel from "@/components/BarcodeLabel";
@@ -34,6 +34,7 @@ export default function Inventory() {
   const [showStockDialog, setShowStockDialog] = useState(false);
   const [stockProduct, setStockProduct] = useState<any>(null);
   const [stockAction, setStockAction] = useState<"purchase" | "adjust" | "transfer">("purchase");
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   const { data: products, refetch } = trpc.products.list.useQuery({ search: search || undefined, categoryId: categoryFilter !== "all" ? parseInt(categoryFilter) : undefined });
   const { data: categories } = trpc.settings.getCategories.useQuery();
@@ -78,6 +79,28 @@ export default function Inventory() {
       await updateProduct.mutateAsync({ id: editProduct.id, ...data });
     } else {
       await createProduct.mutateAsync(data);
+    }
+  };
+
+  const handleImageUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setUploadingImage(true);
+    try {
+      const newUrls: string[] = [];
+      for (const file of Array.from(files)) {
+        const fd = new FormData();
+        fd.append("file", file);
+        const res = await fetch("/api/upload", { method: "POST", body: fd });
+        if (!res.ok) throw new Error("Upload failed");
+        const { url } = await res.json();
+        newUrls.push(url);
+      }
+      setForm(f => ({ ...f, images: [...f.images, ...newUrls] }));
+      toast.success(isAr ? `تم رفع ${newUrls.length} صورة` : `${newUrls.length} image(s) uploaded`);
+    } catch (e: any) {
+      toast.error(e.message || (isAr ? "فشل رفع الصورة" : "Upload failed"));
+    } finally {
+      setUploadingImage(false);
     }
   };
 
@@ -271,6 +294,50 @@ export default function Inventory() {
               <Label>{t("inventory.description")}</Label>
               <Textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={2} />
             </div>
+            {/* Product Images */}
+            <div className="col-span-2 space-y-2">
+              <Label className="flex items-center gap-2">
+                <ImagePlus size={14} />
+                {isAr ? "صور المنتج" : "Product Images"}
+              </Label>
+              <div className="flex flex-wrap gap-2">
+                {form.images.map((url, idx) => (
+                  <div key={idx} className="relative group">
+                    <img src={url} alt={`img-${idx}`} className="w-20 h-20 object-cover rounded-lg border border-border" />
+                    <button
+                      type="button"
+                      onClick={() => setForm(f => ({ ...f, images: f.images.filter((_, i) => i !== idx) }))}
+                      className="absolute -top-1.5 -end-1.5 w-5 h-5 rounded-full bg-destructive text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <X size={10} />
+                    </button>
+                  </div>
+                ))}
+                <label className={cn(
+                  "w-20 h-20 rounded-lg border-2 border-dashed border-border flex flex-col items-center justify-center cursor-pointer hover:border-primary hover:bg-primary/5 transition-colors",
+                  uploadingImage && "opacity-50 cursor-wait"
+                )}>
+                  {uploadingImage ? (
+                    <RefreshCw size={18} className="animate-spin text-muted-foreground" />
+                  ) : (
+                    <>
+                      <Upload size={18} className="text-muted-foreground mb-1" />
+                      <span className="text-[10px] text-muted-foreground text-center">{isAr ? "رفع صورة" : "Upload"}</span>
+                    </>
+                  )}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={e => handleImageUpload(e.target.files)}
+                    disabled={uploadingImage}
+                  />
+                </label>
+              </div>
+              <p className="text-xs text-muted-foreground">{isAr ? "يمكنك رفع أكثر من صورة. الصورة الأولى ستظهر في القائمة." : "You can upload multiple images. First image shows in the list."}</p>
+            </div>
+
             {/* Initial stock (only for new products) */}
             {!editProduct && (
               <div className="col-span-2 space-y-2">

@@ -1,0 +1,210 @@
+{
+  "query": "SHOW COLUMNS FROM settings;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway06.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3hVUzgoV1qgXfsm.53fe60abead7 --database GuiQ96KiLevK2WuhVmj7UT --execute SHOW COLUMNS FROM settings;",
+  "rows": [
+    {
+      "Field": "id",
+      "Type": "int",
+      "Null": "NO",
+      "Key": "PRI",
+      "Default": "NULL",
+      "Extra": "auto_increment"
+    },
+    {
+      "Field": "storeName",
+      "Type": "varchar(255)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "Darin Madani Fashion House",
+      "Extra": ""
+    },
+    {
+      "Field": "storeNameEn",
+      "Type": "varchar(255)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "Darin Madani Fashion House",
+      "Extra": ""
+    },
+    {
+      "Field": "storePhone",
+      "Type": "varchar(32)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "storeEmail",
+      "Type": "varchar(255)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "storeAddress",
+      "Type": "text",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "storeAddressEn",
+      "Type": "text",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "storeLogo",
+      "Type": "text",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "taxNumber",
+      "Type": "varchar(64)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "taxRate",
+      "Type": "decimal(5,2)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "15.00",
+      "Extra": ""
+    },
+    {
+      "Field": "currency",
+      "Type": "varchar(8)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "SAR",
+      "Extra": ""
+    },
+    {
+      "Field": "currencySymbol",
+      "Type": "varchar(8)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "ر.س",
+      "Extra": ""
+    },
+    {
+      "Field": "invoiceNote",
+      "Type": "text",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "invoiceNoteEn",
+      "Type": "text",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "whatsappEnabled",
+      "Type": "tinyint(1)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "0",
+      "Extra": ""
+    },
+    {
+      "Field": "whatsappInstance",
+      "Type": "varchar(128)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "whatsappApiKey",
+      "Type": "varchar(255)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "whatsappApiBase",
+      "Type": "varchar(255)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "https://elv.academy-smart.com",
+      "Extra": ""
+    },
+    {
+      "Field": "whatsappTemplate",
+      "Type": "text",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "myfatoorahEnabled",
+      "Type": "tinyint(1)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "0",
+      "Extra": ""
+    },
+    {
+      "Field": "myfatoorahToken",
+      "Type": "text",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "myfatoorahEnv",
+      "Type": "enum('sandbox','live')",
+      "Null": "YES",
+      "Key": "",
+      "Default": "sandbox",
+      "Extra": ""
+    },
+    {
+      "Field": "myfatoorahSupplier",
+      "Type": "varchar(64)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "updatedAt",
+      "Type": "timestamp",
+      "Null": "NO",
+      "Key": "",
+      "Default": "CURRENT_TIMESTAMP",
+      "Extra": "DEFAULT_GENERATED on update CURRENT_TIMESTAMP"
+    },
+    {
+      "Field": "priceIncludesTax",
+      "Type": "tinyint(1)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "0",
+      "Extra": ""
+    }
+  ],
+  "messages": [],
+  "stdout": "Field\tType\tNull\tKey\tDefault\tExtra\nid\tint\tNO\tPRI\tNULL\tauto_increment\nstoreName\tvarchar(255)\tYES\t\tDarin Madani Fashion House\t\nstoreNameEn\tvarchar(255)\tYES\t\tDarin Madani Fashion House\t\nstorePhone\tvarchar(32)\tYES\t\tNULL\t\nstoreEmail\tvarchar(255)\tYES\t\tNULL\t\nstoreAddress\ttext\tYES\t\tNULL\t\nstoreAddressEn\ttext\tYES\t\tNULL\t\nstoreLogo\ttext\tYES\t\tNULL\t\ntaxNumber\tvarchar(64)\tYES\t\tNULL\t\ntaxRate\tdecimal(5,2)\tYES\t\t15.00\t\ncurrency\tvarchar(8)\tYES\t\tSAR\t\ncurrencySymbol\tvarchar(8)\tYES\t\tر.س\t\ninvoiceNote\ttext\tYES\t\tNULL\t\ninvoiceNoteEn\ttext\tYES\t\tNULL\t\nwhatsappEnabled\ttinyint(1)\tYES\t\t0\t\nwhatsappInstance\tvarchar(128)\tYES\t\tNULL\t\nwhatsappApiKey\tvarchar(255)\tYES\t\tNULL\t\nwhatsappApiBase\tvarchar(255)\tYES\t\thttps://elv.academy-smart.com\t\nwhatsappTemplate\ttext\tYES\t\tNULL\t\nmyfatoorahEnabled\ttinyint(1)\tYES\t\t0\t\nmyfatoorahToken\ttext\tYES\t\tNULL\t\nmyfatoorahEnv\tenum('sandbox','live')\tYES\t\tsandbox\t\nmyfatoorahSupplier\tvarchar(64)\tYES\t\tNULL\t\nupdatedAt\ttimestamp\tNO\t\tCURRENT_TIMESTAMP\tDEFAULT_GENERATED on update CURRENT_TIMESTAMP\npriceIncludesTax\ttinyint(1)\tYES\t\t0\t\n",
+  "stderr": "",
+  "execution_time_ms": 1860
+}

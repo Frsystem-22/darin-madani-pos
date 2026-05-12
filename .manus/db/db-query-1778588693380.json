@@ -1,0 +1,9 @@
+{
+  "query": "ALTER TABLE settings ADD COLUMN IF NOT EXISTS priceIncludesTax tinyint(1) DEFAULT 0;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway06.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3hVUzgoV1qgXfsm.53fe60abead7 --database GuiQ96KiLevK2WuhVmj7UT --execute ALTER TABLE settings ADD COLUMN IF NOT EXISTS priceIncludesTax tinyint(1) DEFAULT 0;",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 1873
+}

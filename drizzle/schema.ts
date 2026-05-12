@@ -59,6 +59,7 @@ export const settings = mysqlTable("settings", {
   myfatoorahToken:      text("myfatoorahToken"),
   myfatoorahEnv:        mysqlEnum("myfatoorahEnv", ["sandbox", "live"]).default("sandbox"),
   myfatoorahSupplier:   varchar("myfatoorahSupplier", { length: 64 }),
+  priceIncludesTax:     boolean("priceIncludesTax").default(false),
   updatedAt:            timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
@@ -242,6 +243,16 @@ export const returnItems = mysqlTable("return_items", {
   lineTotal:   decimal("lineTotal", { precision: 12, scale: 2 }).notNull(),
 });
 
+// ─── INVOICE PAYMENTS (Split Payment) ────────────────────────────────────────
+export const invoicePayments = mysqlTable("invoice_payments", {
+  id:        int("id").autoincrement().primaryKey(),
+  invoiceId: int("invoiceId").notNull(),
+  method:    mysqlEnum("method", ["cash", "card", "transfer", "electronic"]).notNull().default("cash"),
+  amount:    decimal("amount", { precision: 12, scale: 2 }).notNull(),
+  reference: varchar("reference", { length: 128 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
 // ─── TYPES ─────────────────────────────────────────────────────────────────
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
@@ -256,3 +267,4 @@ export type Category = typeof categories.$inferSelect;
 export type StockMovement = typeof stockMovements.$inferSelect;
 export type Discount = typeof discounts.$inferSelect;
 export type Settings = typeof settings.$inferSelect;
+export type InvoicePayment = typeof invoicePayments.$inferSelect;

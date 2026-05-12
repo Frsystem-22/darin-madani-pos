@@ -36,6 +36,7 @@ export const settingsRouter = router({
     myfatoorahToken: z.string().optional(),
     myfatoorahEnv: z.enum(["sandbox", "live"]).optional(),
     myfatoorahSupplier: z.string().optional(), // ثابت = 24 لـ Darin Madani
+    priceIncludesTax: z.boolean().optional(),
   })).mutation(async ({ input }) => {
     await updateSettings(input as any);
     return { success: true };

@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
@@ -12,13 +12,12 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
-  Search, ShoppingCart, Trash2, Plus, Minus, User, Tag,
+  Search, ShoppingCart, Trash2, Plus, Minus, User, UserPlus,
   CreditCard, Banknote, Smartphone, Zap, CheckCircle,
-  MessageCircle, Printer, X, Barcode, ChevronDown, Package
+  MessageCircle, Printer, X, Barcode, ChevronDown, Package, SplitSquareHorizontal
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-// InvoicePrint will be imported after creation
-// import InvoicePrint from "@/components/InvoicePrint";
+import BarcodeLabel from "@/components/BarcodeLabel";
 
 interface CartItem {
   productId: number;
@@ -34,6 +33,11 @@ interface CartItem {
   availableQty: number;
 }
 
+interface PaymentSplit {
+  method: "cash" | "card" | "transfer" | "electronic";
+  amount: string;
+}
+
 export default function POS() {
   const { t, i18n } = useTranslation();
   const isAr = i18n.language === "ar";
@@ -46,15 +50,29 @@ export default function POS() {
   const [customerSearch, setCustomerSearch] = useState("");
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   const [warehouseId, setWarehouseId] = useState<number>(1);
+
+  // Payment state
+  const [paymentMode, setPaymentMode] = useState<"single" | "split">("single");
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "card" | "transfer" | "electronic">("cash");
+  const [paymentSplits, setPaymentSplits] = useState<PaymentSplit[]>([
+    { method: "cash", amount: "" },
+    { method: "card", amount: "" },
+  ]);
+
   const [discountType, setDiscountType] = useState<"none" | "percentage" | "fixed">("none");
   const [discountValue, setDiscountValue] = useState("");
   const [receivedAmount, setReceivedAmount] = useState("");
   const [showPayDialog, setShowPayDialog] = useState(false);
   const [completedInvoice, setCompletedInvoice] = useState<any>(null);
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
-  const [showPrintDialog, setShowPrintDialog] = useState(false);
+  const [showPrintLabel, setShowPrintLabel] = useState<any>(null);
+
+  // Quick add customer dialog
+  const [showQuickCustomer, setShowQuickCustomer] = useState(false);
+  const [quickCustomerForm, setQuickCustomerForm] = useState({ name: "", phone: "", email: "" });
+
   const searchRef = useRef<HTMLInputElement>(null);
+  const utils = trpc.useUtils();
 
   const { data: products } = trpc.products.list.useQuery({ search: search || undefined, categoryId: categoryFilter !== "all" ? parseInt(categoryFilter) : undefined });
   const { data: categories } = trpc.settings.getCategories.useQuery();
@@ -64,12 +82,25 @@ export default function POS() {
 
   const createInvoice = trpc.invoices.create.useMutation();
   const sendWhatsApp = trpc.invoices.sendWhatsApp.useMutation();
+  const createCustomer = trpc.customers.create.useMutation({
+    onSuccess: (newCustomer: any) => {
+      utils.customers.list.invalidate();
+      setSelectedCustomer(newCustomer);
+      setShowQuickCustomer(false);
+      setQuickCustomerForm({ name: "", phone: "", email: "" });
+      toast.success(isAr ? "تم إضافة العميل" : "Customer added");
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
 
   // Barcode scan handler
   useEffect(() => {
     let buffer = "";
     let lastKey = 0;
     const handler = (e: KeyboardEvent) => {
+      // Skip if focus is on an input (manual typing)
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
       const now = Date.now();
       if (now - lastKey > 300) buffer = "";
       lastKey = now;
@@ -84,10 +115,17 @@ export default function POS() {
     return () => window.removeEventListener("keydown", handler);
   }, [cart, warehouseId]);
 
-  const handleBarcodeSearch = useCallback(async (barcode: string) => {
-    setSearch(barcode);
-    setTimeout(() => setSearch(""), 2000);
-  }, []);
+  const handleBarcodeSearch = useCallback((barcode: string) => {
+    if (!products) return;
+    const found = products.find((p: any) => p.barcode === barcode);
+    if (found) {
+      addToCart(found);
+      toast.success(isAr ? `تم إضافة: ${found.name}` : `Added: ${found.name}`);
+    } else {
+      setSearch(barcode);
+      setTimeout(() => setSearch(""), 3000);
+    }
+  }, [products, isAr]);
 
   const addToCart = (product: any) => {
     const stock = product.stock?.find((s: any) => s.warehouseId === warehouseId);
@@ -134,19 +172,56 @@ export default function POS() {
 
   const removeItem = (productId: number) => setCart(prev => prev.filter(i => i.productId !== productId));
 
-  const subtotal = cart.reduce((s, i) => s + parseFloat(i.lineTotal), 0);
+  // ── Tax calculations ──────────────────────────────────────────────────────
+  const priceIncludesTax = settings?.priceIncludesTax || false;
   const taxRate = parseFloat(settings?.taxRate || "0");
+
+  const subtotalBeforeDiscount = cart.reduce((s, i) => s + parseFloat(i.lineTotal), 0);
   const discountAmount = discountType === "percentage"
-    ? subtotal * (parseFloat(discountValue || "0") / 100)
+    ? subtotalBeforeDiscount * (parseFloat(discountValue || "0") / 100)
     : discountType === "fixed" ? parseFloat(discountValue || "0") : 0;
-  const taxableAmount = subtotal - discountAmount;
-  const taxAmount = taxableAmount * (taxRate / 100);
-  const total = taxableAmount + taxAmount;
+  const afterDiscount = subtotalBeforeDiscount - discountAmount;
+
+  let taxAmount: number;
+  let total: number;
+  let subtotalDisplay: number; // what to show as "subtotal" (ex-tax)
+
+  if (priceIncludesTax && taxRate > 0) {
+    // Prices already include tax → extract tax
+    taxAmount = afterDiscount - afterDiscount / (1 + taxRate / 100);
+    subtotalDisplay = afterDiscount - taxAmount;
+    total = afterDiscount;
+  } else {
+    // Prices are ex-tax → add tax
+    taxAmount = afterDiscount * (taxRate / 100);
+    subtotalDisplay = afterDiscount;
+    total = afterDiscount + taxAmount;
+  }
+
   const change = parseFloat(receivedAmount || "0") - total;
+
+  // Split payment total
+  const splitTotal = paymentSplits.reduce((s, p) => s + parseFloat(p.amount || "0"), 0);
+  const splitRemaining = total - splitTotal;
 
   const handleCompleteSale = async () => {
     if (cart.length === 0) { toast.error(isAr ? "السلة فارغة" : "Cart is empty"); return; }
+
+    // Validate split payment
+    if (paymentMode === "split") {
+      const filledSplits = paymentSplits.filter(p => parseFloat(p.amount || "0") > 0);
+      if (filledSplits.length < 2) {
+        toast.error(isAr ? "يجب إدخال مبلغين على الأقل في الدفع المتعدد" : "Enter at least 2 payment amounts");
+        return;
+      }
+      if (Math.abs(splitRemaining) > 0.01) {
+        toast.error(isAr ? `المبلغ المتبقي: ${splitRemaining.toFixed(2)} ${currency}` : `Remaining: ${splitRemaining.toFixed(2)} ${currency}`);
+        return;
+      }
+    }
+
     try {
+      const effectiveMethod = paymentMode === "split" ? "mixed" : paymentMethod;
       const result = await createInvoice.mutateAsync({
         customerId: selectedCustomer?.id,
         customerName: selectedCustomer?.name || (isAr ? "عميل عابر" : "Walk-in"),
@@ -164,14 +239,14 @@ export default function POS() {
           discountPct: i.discountPct,
           lineTotal: i.lineTotal,
         })),
-        subtotal: subtotal.toFixed(2),
+        subtotal: subtotalDisplay.toFixed(2),
         discountType,
         discountValue: discountValue || "0",
         discountAmount: discountAmount.toFixed(2),
         taxRate: taxRate.toFixed(2),
         taxAmount: taxAmount.toFixed(2),
         total: total.toFixed(2),
-        paymentMethod,
+        paymentMethod: effectiveMethod as any,
         origin: window.location.origin,
       });
       setCompletedInvoice({ ...result, total: total.toFixed(2), customer: selectedCustomer, items: cart, settings });
@@ -181,27 +256,95 @@ export default function POS() {
       setSelectedCustomer(null);
       setDiscountType("none");
       setDiscountValue("");
+      setPaymentMode("single");
+      setPaymentMethod("cash");
+      setReceivedAmount("");
     } catch (e: any) {
       toast.error(e.message || (isAr ? "حدث خطأ" : "Error occurred"));
     }
   };
 
   const handleSendWhatsApp = async () => {
-    if (!completedInvoice || !selectedCustomer?.phone) return;
+    if (!completedInvoice?.id) return;
+    const phone = completedInvoice?.customer?.phone || selectedCustomer?.phone;
+    if (!phone) { toast.error(isAr ? "لا يوجد رقم هاتف للعميل" : "No customer phone"); return; }
     try {
-      await sendWhatsApp.mutateAsync({ invoiceId: completedInvoice.id, phone: selectedCustomer.phone });
+      await sendWhatsApp.mutateAsync({ invoiceId: completedInvoice.id, phone });
       toast.success(isAr ? "تم إرسال الفاتورة عبر الواتساب" : "Invoice sent via WhatsApp");
     } catch {
       toast.error(isAr ? "فشل إرسال الواتساب" : "WhatsApp send failed");
     }
   };
 
+  const handlePrintReceipt = () => {
+    if (!completedInvoice) return;
+    const inv = completedInvoice;
+    const storeName = isAr ? (settings?.storeName || "Darin Madani") : (settings?.storeNameEn || settings?.storeName || "Darin Madani");
+    const printContent = `
+      <html dir="${isAr ? "rtl" : "ltr"}">
+      <head>
+        <meta charset="utf-8">
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { font-family: 'Courier New', monospace; font-size: 12px; width: 58mm; padding: 4mm; }
+          .center { text-align: center; }
+          .bold { font-weight: bold; }
+          .divider { border-top: 1px dashed #000; margin: 3px 0; }
+          .row { display: flex; justify-content: space-between; margin: 2px 0; }
+          .total-row { font-size: 14px; font-weight: bold; }
+          .store-name { font-size: 16px; font-weight: bold; margin-bottom: 2px; }
+        </style>
+      </head>
+      <body>
+        <div class="center">
+          <div class="store-name">${storeName}</div>
+          ${settings?.storePhone ? `<div>${settings.storePhone}</div>` : ""}
+          ${settings?.storeAddress ? `<div>${settings.storeAddress}</div>` : ""}
+        </div>
+        <div class="divider"></div>
+        <div class="row"><span>${isAr ? "فاتورة رقم" : "Invoice #"}:</span><span>${inv.invoiceNumber}</span></div>
+        <div class="row"><span>${isAr ? "التاريخ" : "Date"}:</span><span>${new Date().toLocaleDateString(isAr ? "ar-SA" : "en-US")}</span></div>
+        ${inv.customer ? `<div class="row"><span>${isAr ? "العميل" : "Customer"}:</span><span>${inv.customer.name}</span></div>` : ""}
+        <div class="divider"></div>
+        ${(inv.items || []).map((item: any) => `
+          <div class="bold">${item.productName}</div>
+          ${item.color || item.size ? `<div>${item.color || ""} ${item.size ? "· " + item.size : ""}</div>` : ""}
+          <div class="row">
+            <span>${item.qty} × ${Number(item.unitPrice).toLocaleString()}</span>
+            <span>${Number(item.lineTotal).toLocaleString()} ${currency}</span>
+          </div>
+        `).join("")}
+        <div class="divider"></div>
+        ${discountAmount > 0 ? `<div class="row"><span>${isAr ? "خصم" : "Discount"}:</span><span>- ${discountAmount.toFixed(2)} ${currency}</span></div>` : ""}
+        ${taxRate > 0 ? `<div class="row"><span>${isAr ? "ضريبة" : "Tax"} (${taxRate}%):</span><span>${taxAmount.toFixed(2)} ${currency}</span></div>` : ""}
+        <div class="row total-row"><span>${isAr ? "الإجمالي" : "Total"}:</span><span>${Number(inv.total).toLocaleString()} ${currency}</span></div>
+        <div class="divider"></div>
+        ${settings?.invoiceNote ? `<div class="center" style="font-size:10px;margin-top:4px;">${settings.invoiceNote}</div>` : ""}
+        <div class="center" style="margin-top:6px;font-size:10px;">${isAr ? "شكراً لزيارتكم" : "Thank you for your visit"}</div>
+      </body>
+      </html>
+    `;
+    const win = window.open("", "_blank", "width=300,height=600");
+    if (win) {
+      win.document.write(printContent);
+      win.document.close();
+      setTimeout(() => { win.print(); win.close(); }, 500);
+    }
+  };
+
+  const paymentMethods = [
+    { value: "cash", label: isAr ? "نقدي" : "Cash", icon: <Banknote size={16} /> },
+    { value: "card", label: isAr ? "بطاقة" : "Card", icon: <CreditCard size={16} /> },
+    { value: "transfer", label: isAr ? "تحويل" : "Transfer", icon: <Smartphone size={16} /> },
+    { value: "electronic", label: isAr ? "إلكتروني" : "Electronic", icon: <Zap size={16} /> },
+  ];
+
   return (
     <div className="flex h-full">
-      {/* Products panel */}
-      <div className="flex-1 flex flex-col border-e border-border">
+      {/* ── Products panel ─────────────────────────────────────────────── */}
+      <div className="flex-1 flex flex-col border-e border-border overflow-hidden">
         {/* Search & filters */}
-        <div className="p-3 border-b border-border space-y-2 bg-card">
+        <div className="p-3 border-b border-border space-y-2 bg-card shrink-0">
           <div className="flex gap-2">
             <div className="relative flex-1">
               <Search size={15} className="absolute start-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -227,7 +370,7 @@ export default function POS() {
             </Select>
           </div>
           {/* Category filter */}
-          <div className="flex gap-1.5 overflow-x-auto pb-1">
+          <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
             <Button
               variant={categoryFilter === "all" ? "default" : "outline"}
               size="sm" className="h-7 text-xs shrink-0"
@@ -259,7 +402,7 @@ export default function POS() {
                   key={product.id}
                   onClick={() => addToCart(product)}
                   className={cn(
-                    "bg-card border border-border rounded-xl p-3 cursor-pointer transition-all duration-150",
+                    "bg-card border border-border rounded-xl p-3 cursor-pointer transition-all duration-150 select-none",
                     "hover:border-primary hover:shadow-md hover:shadow-primary/10",
                     qty === 0 && "opacity-50 cursor-not-allowed"
                   )}
@@ -272,9 +415,18 @@ export default function POS() {
                     </div>
                   )}
                   <p className="text-sm font-medium truncate">{isAr ? product.name : (product.nameEn || product.name)}</p>
-                  {product.color && <p className="text-xs text-muted-foreground">{isAr ? product.color : product.colorEn} {product.size && `· ${product.size}`}</p>}
+                  {(product.color || product.size) && (
+                    <p className="text-xs text-muted-foreground truncate">
+                      {isAr ? product.color : product.colorEn} {product.size && `· ${product.size}`}
+                    </p>
+                  )}
                   <div className="flex items-center justify-between mt-1.5">
-                    <span className="text-sm font-bold text-primary">{Number(product.salePrice).toLocaleString()} {currency}</span>
+                    <div>
+                      <span className="text-sm font-bold text-primary">{Number(product.salePrice).toLocaleString()} {currency}</span>
+                      {priceIncludesTax && taxRate > 0 && (
+                        <p className="text-[10px] text-muted-foreground">{isAr ? "شامل الضريبة" : "Tax incl."}</p>
+                      )}
+                    </div>
                     <Badge variant={qty === 0 ? "destructive" : qty <= (product.lowStockAlert || 5) ? "secondary" : "outline"} className="text-xs">
                       {qty}
                     </Badge>
@@ -292,50 +444,77 @@ export default function POS() {
         </ScrollArea>
       </div>
 
-      {/* Cart panel */}
-      <div className="w-80 xl:w-96 flex flex-col bg-card">
-        {/* Customer */}
-        <div className="p-3 border-b border-border">
-          <div className="relative">
-            <div className="flex items-center gap-2 h-9 px-3 rounded-lg border border-input bg-background cursor-pointer"
-              onClick={() => setShowCustomerDropdown(!showCustomerDropdown)}>
-              <User size={14} className="text-muted-foreground" />
-              <span className="text-sm flex-1 truncate">
-                {selectedCustomer ? selectedCustomer.name : t("pos.walkIn")}
-              </span>
-              <ChevronDown size={14} className="text-muted-foreground" />
-            </div>
-            {showCustomerDropdown && (
-              <div className="absolute top-full start-0 end-0 z-50 bg-popover border border-border rounded-lg shadow-lg mt-1">
-                <div className="p-2">
-                  <Input
-                    value={customerSearch}
-                    onChange={e => setCustomerSearch(e.target.value)}
-                    placeholder={isAr ? "ابحث عن عميل..." : "Search customer..."}
-                    className="h-8 text-sm"
-                    autoFocus
-                  />
-                </div>
-                <ScrollArea className="max-h-48">
-                  <div
-                    className="px-3 py-2 text-sm cursor-pointer hover:bg-accent"
-                    onClick={() => { setSelectedCustomer(null); setShowCustomerDropdown(false); setCustomerSearch(""); }}
+      {/* ── Cart panel ─────────────────────────────────────────────────── */}
+      <div className="w-80 xl:w-96 flex flex-col bg-card overflow-hidden">
+        {/* Customer selector */}
+        <div className="p-3 border-b border-border shrink-0">
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <div
+                className="flex items-center gap-2 h-9 px-3 rounded-lg border border-input bg-background cursor-pointer"
+                onClick={() => setShowCustomerDropdown(!showCustomerDropdown)}
+              >
+                <User size={14} className="text-muted-foreground shrink-0" />
+                <span className="text-sm flex-1 truncate">
+                  {selectedCustomer ? selectedCustomer.name : t("pos.walkIn")}
+                </span>
+                {selectedCustomer && (
+                  <button
+                    onClick={e => { e.stopPropagation(); setSelectedCustomer(null); }}
+                    className="text-muted-foreground hover:text-destructive"
                   >
-                    {t("pos.walkIn")}
-                  </div>
-                  {(customers || []).map((c: any) => (
-                    <div
-                      key={c.id}
-                      className="px-3 py-2 text-sm cursor-pointer hover:bg-accent"
-                      onClick={() => { setSelectedCustomer(c); setShowCustomerDropdown(false); setCustomerSearch(""); }}
-                    >
-                      <p className="font-medium">{c.name}</p>
-                      {c.phone && <p className="text-xs text-muted-foreground">{c.phone}</p>}
-                    </div>
-                  ))}
-                </ScrollArea>
+                    <X size={12} />
+                  </button>
+                )}
+                {!selectedCustomer && <ChevronDown size={14} className="text-muted-foreground shrink-0" />}
               </div>
-            )}
+              {showCustomerDropdown && (
+                <div className="absolute top-full start-0 end-0 z-50 bg-popover border border-border rounded-lg shadow-lg mt-1">
+                  <div className="p-2">
+                    <Input
+                      value={customerSearch}
+                      onChange={e => setCustomerSearch(e.target.value)}
+                      placeholder={isAr ? "ابحث عن عميل..." : "Search customer..."}
+                      className="h-8 text-sm"
+                      autoFocus
+                    />
+                  </div>
+                  <ScrollArea className="max-h-48">
+                    <div
+                      className="px-3 py-2 text-sm cursor-pointer hover:bg-accent"
+                      onClick={() => { setSelectedCustomer(null); setShowCustomerDropdown(false); setCustomerSearch(""); }}
+                    >
+                      {t("pos.walkIn")}
+                    </div>
+                    {(customers || []).map((c: any) => (
+                      <div
+                        key={c.id}
+                        className="px-3 py-2 text-sm cursor-pointer hover:bg-accent"
+                        onClick={() => { setSelectedCustomer(c); setShowCustomerDropdown(false); setCustomerSearch(""); }}
+                      >
+                        <p className="font-medium">{c.name}</p>
+                        {c.phone && <p className="text-xs text-muted-foreground">{c.phone}</p>}
+                      </div>
+                    ))}
+                    {customerSearch.length > 0 && (customers || []).length === 0 && (
+                      <div className="px-3 py-2 text-xs text-muted-foreground text-center">
+                        {isAr ? "لا توجد نتائج" : "No results"}
+                      </div>
+                    )}
+                  </ScrollArea>
+                </div>
+              )}
+            </div>
+            {/* Quick add customer button */}
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-9 w-9 shrink-0"
+              title={isAr ? "إضافة عميل جديد" : "Add new customer"}
+              onClick={() => { setShowCustomerDropdown(false); setShowQuickCustomer(true); }}
+            >
+              <UserPlus size={15} />
+            </Button>
           </div>
         </div>
 
@@ -357,7 +536,7 @@ export default function POS() {
                         <p className="text-xs text-muted-foreground">{item.color} {item.size && `· ${item.size}`}</p>
                       )}
                     </div>
-                    <button onClick={() => removeItem(item.productId)} className="text-muted-foreground hover:text-destructive">
+                    <button onClick={() => removeItem(item.productId)} className="text-muted-foreground hover:text-destructive shrink-0">
                       <X size={14} />
                     </button>
                   </div>
@@ -383,14 +562,14 @@ export default function POS() {
 
         {/* Discount */}
         {cart.length > 0 && (
-          <div className="px-3 pb-2">
+          <div className="px-3 pb-2 shrink-0">
             <div className="flex gap-2">
               <Select value={discountType} onValueChange={(v: any) => setDiscountType(v)}>
                 <SelectTrigger className="h-8 text-xs flex-1">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">{t("common.discount")}</SelectItem>
+                  <SelectItem value="none">{isAr ? "بدون خصم" : "No discount"}</SelectItem>
                   <SelectItem value="percentage">% {t("common.discount")}</SelectItem>
                   <SelectItem value="fixed">{currency} {t("common.discount")}</SelectItem>
                 </SelectContent>
@@ -409,10 +588,10 @@ export default function POS() {
         )}
 
         {/* Totals */}
-        <div className="border-t border-border p-3 space-y-1.5">
+        <div className="border-t border-border p-3 space-y-1.5 shrink-0">
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">{t("common.subtotal")}</span>
-            <span>{subtotal.toLocaleString()} {currency}</span>
+            <span>{subtotalDisplay.toFixed(2)} {currency}</span>
           </div>
           {discountAmount > 0 && (
             <div className="flex justify-between text-sm text-green-600">
@@ -422,7 +601,10 @@ export default function POS() {
           )}
           {taxRate > 0 && (
             <div className="flex justify-between text-sm text-muted-foreground">
-              <span>{t("common.tax")} ({taxRate}%)</span>
+              <span>
+                {t("common.tax")} ({taxRate}%)
+                {priceIncludesTax && <span className="text-xs ms-1 text-amber-600">{isAr ? "مشمول" : "incl."}</span>}
+              </span>
               <span>{taxAmount.toFixed(2)} {currency}</span>
             </div>
           )}
@@ -434,7 +616,7 @@ export default function POS() {
         </div>
 
         {/* Action buttons */}
-        <div className="p-3 pt-0 space-y-2">
+        <div className="p-3 pt-0 space-y-2 shrink-0">
           <Button
             className="w-full gap-2"
             size="lg"
@@ -451,57 +633,127 @@ export default function POS() {
         </div>
       </div>
 
-      {/* Payment Dialog */}
+      {/* ── Payment Dialog ─────────────────────────────────────────────── */}
       <Dialog open={showPayDialog} onOpenChange={setShowPayDialog}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>{t("pos.payment")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <div>
-              <Label className="text-sm mb-2 block">{t("pos.paymentMethod")}</Label>
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  { value: "cash", label: t("pos.cash"), icon: <Banknote size={16} /> },
-                  { value: "card", label: t("pos.card"), icon: <CreditCard size={16} /> },
-                  { value: "transfer", label: t("pos.transfer"), icon: <Smartphone size={16} /> },
-                  { value: "electronic", label: t("pos.electronic"), icon: <Zap size={16} /> },
-                ].map(m => (
-                  <button
-                    key={m.value}
-                    onClick={() => setPaymentMethod(m.value as any)}
-                    className={cn(
-                      "flex items-center gap-2 p-3 rounded-lg border text-sm font-medium transition-all",
-                      paymentMethod === m.value
-                        ? "border-primary bg-primary/10 text-primary"
-                        : "border-border hover:border-primary/50"
-                    )}
-                  >
-                    {m.icon} {m.label}
-                  </button>
-                ))}
-              </div>
+            {/* Payment mode toggle */}
+            <div className="flex gap-2">
+              <Button
+                variant={paymentMode === "single" ? "default" : "outline"}
+                size="sm" className="flex-1 gap-1"
+                onClick={() => setPaymentMode("single")}
+              >
+                <CreditCard size={14} />
+                {isAr ? "دفعة واحدة" : "Single Payment"}
+              </Button>
+              <Button
+                variant={paymentMode === "split" ? "default" : "outline"}
+                size="sm" className="flex-1 gap-1"
+                onClick={() => setPaymentMode("split")}
+              >
+                <SplitSquareHorizontal size={14} />
+                {isAr ? "دفع متعدد" : "Split Payment"}
+              </Button>
             </div>
-            {paymentMethod === "cash" && (
-              <div>
-                <Label className="text-sm">{t("pos.received")}</Label>
-                <Input
-                  value={receivedAmount}
-                  onChange={e => setReceivedAmount(e.target.value)}
-                  placeholder={total.toFixed(2)}
-                  type="number"
-                  className="mt-1"
-                />
-                {change > 0 && (
-                  <p className="text-sm text-green-600 mt-1 font-medium">
-                    {t("pos.change")}: {change.toFixed(2)} {currency}
-                  </p>
+
+            {paymentMode === "single" ? (
+              <>
+                <div>
+                  <Label className="text-sm mb-2 block">{t("pos.paymentMethod")}</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {paymentMethods.map(m => (
+                      <button
+                        key={m.value}
+                        onClick={() => setPaymentMethod(m.value as any)}
+                        className={cn(
+                          "flex items-center gap-2 p-3 rounded-lg border text-sm font-medium transition-all",
+                          paymentMethod === m.value
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-border hover:border-primary/50"
+                        )}
+                      >
+                        {m.icon} {m.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {paymentMethod === "cash" && (
+                  <div>
+                    <Label className="text-sm">{t("pos.received")}</Label>
+                    <Input
+                      value={receivedAmount}
+                      onChange={e => setReceivedAmount(e.target.value)}
+                      placeholder={total.toFixed(2)}
+                      type="number"
+                      className="mt-1"
+                    />
+                    {change > 0 && (
+                      <p className="text-sm text-green-600 mt-1 font-medium">
+                        {t("pos.change")}: {change.toFixed(2)} {currency}
+                      </p>
+                    )}
+                  </div>
                 )}
+              </>
+            ) : (
+              <div className="space-y-3">
+                <Label className="text-sm">{isAr ? "توزيع المبلغ على طرق الدفع" : "Distribute amount across payment methods"}</Label>
+                {paymentSplits.map((split, idx) => (
+                  <div key={idx} className="flex gap-2 items-center">
+                    <Select
+                      value={split.method}
+                      onValueChange={v => setPaymentSplits(prev => prev.map((p, i) => i === idx ? { ...p, method: v as any } : p))}
+                    >
+                      <SelectTrigger className="w-36 h-9">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {paymentMethods.map(m => (
+                          <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      type="number"
+                      placeholder="0.00"
+                      value={split.amount}
+                      onChange={e => setPaymentSplits(prev => prev.map((p, i) => i === idx ? { ...p, amount: e.target.value } : p))}
+                      className="flex-1 h-9"
+                    />
+                    {paymentSplits.length > 2 && (
+                      <button onClick={() => setPaymentSplits(prev => prev.filter((_, i) => i !== idx))} className="text-destructive">
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+                <Button
+                  variant="outline" size="sm" className="gap-1"
+                  onClick={() => setPaymentSplits(prev => [...prev, { method: "cash", amount: "" }])}
+                >
+                  <Plus size={12} />
+                  {isAr ? "إضافة طريقة دفع" : "Add payment method"}
+                </Button>
+                <div className={cn(
+                  "text-sm font-medium p-2 rounded-lg",
+                  Math.abs(splitRemaining) < 0.01 ? "bg-green-50 text-green-700 dark:bg-green-900/20" : "bg-amber-50 text-amber-700 dark:bg-amber-900/20"
+                )}>
+                  {Math.abs(splitRemaining) < 0.01
+                    ? (isAr ? "✓ المبالغ متطابقة" : "✓ Amounts match")
+                    : `${isAr ? "المتبقي" : "Remaining"}: ${splitRemaining.toFixed(2)} ${currency}`
+                  }
+                </div>
               </div>
             )}
+
+            {/* Summary */}
             <div className="bg-muted rounded-lg p-3 space-y-1">
               <div className="flex justify-between text-sm">
-                <span>{t("common.subtotal")}</span><span>{subtotal.toFixed(2)} {currency}</span>
+                <span>{t("common.subtotal")}</span><span>{subtotalDisplay.toFixed(2)} {currency}</span>
               </div>
               {discountAmount > 0 && (
                 <div className="flex justify-between text-sm text-green-600">
@@ -510,7 +762,8 @@ export default function POS() {
               )}
               {taxRate > 0 && (
                 <div className="flex justify-between text-sm">
-                  <span>{t("common.tax")}</span><span>{taxAmount.toFixed(2)} {currency}</span>
+                  <span>{t("common.tax")} ({taxRate}%){priceIncludesTax ? (isAr ? " - مشمول" : " - incl.") : ""}</span>
+                  <span>{taxAmount.toFixed(2)} {currency}</span>
                 </div>
               )}
               <div className="flex justify-between font-bold text-base border-t border-border pt-1 mt-1">
@@ -529,7 +782,7 @@ export default function POS() {
         </DialogContent>
       </Dialog>
 
-      {/* Success Dialog */}
+      {/* ── Success Dialog ─────────────────────────────────────────────── */}
       <Dialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
         <DialogContent className="max-w-sm text-center">
           <div className="flex flex-col items-center gap-4 py-4">
@@ -538,24 +791,23 @@ export default function POS() {
             </div>
             <div>
               <h3 className="text-lg font-bold">{t("pos.saleComplete")}</h3>
-              <p className="text-sm text-muted-foreground mt-1">
-                {completedInvoice?.invoiceNumber}
-              </p>
-              <p className="text-2xl font-bold text-primary mt-2">
-                {completedInvoice?.total} {currency}
-              </p>
+              <p className="text-sm text-muted-foreground mt-1">{completedInvoice?.invoiceNumber}</p>
+              <p className="text-2xl font-bold text-primary mt-2">{completedInvoice?.total} {currency}</p>
             </div>
             <div className="flex gap-2 w-full">
-              <Button variant="outline" className="flex-1 gap-2" onClick={() => { setShowSuccessDialog(false); setShowPrintDialog(true); }}>
+              <Button variant="outline" className="flex-1 gap-2" onClick={handlePrintReceipt}>
                 <Printer size={14} />
                 {t("pos.printReceipt")}
               </Button>
-              {selectedCustomer?.phone && (
-                <Button variant="outline" className="flex-1 gap-2 text-green-600 border-green-200" onClick={handleSendWhatsApp}>
-                  <MessageCircle size={14} />
-                  {t("pos.sendWhatsApp")}
-                </Button>
-              )}
+              <Button
+                variant="outline"
+                className="flex-1 gap-2 text-green-600 border-green-200 hover:bg-green-50"
+                onClick={handleSendWhatsApp}
+                disabled={sendWhatsApp.isPending}
+              >
+                <MessageCircle size={14} />
+                {t("pos.sendWhatsApp")}
+              </Button>
             </div>
             <Button className="w-full" onClick={() => setShowSuccessDialog(false)}>
               {isAr ? "فاتورة جديدة" : "New Sale"}
@@ -564,18 +816,64 @@ export default function POS() {
         </DialogContent>
       </Dialog>
 
-      {/* Print Dialog */}
-      {/* Print dialog placeholder - InvoicePrint component */}
-      {showPrintDialog && (
-        <Dialog open={showPrintDialog} onOpenChange={setShowPrintDialog}>
-          <DialogContent>
-            <DialogHeader><DialogTitle>{t("invoices.printInvoice")}</DialogTitle></DialogHeader>
-            <p className="text-sm text-muted-foreground text-center py-4">{completedInvoice?.invoiceNumber}</p>
-            <DialogFooter>
-              <Button onClick={() => { window.print(); setShowPrintDialog(false); }}>{t("common.print")}</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+      {/* ── Quick Add Customer Dialog ──────────────────────────────────── */}
+      <Dialog open={showQuickCustomer} onOpenChange={setShowQuickCustomer}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserPlus size={18} />
+              {isAr ? "إضافة عميل جديد" : "Add New Customer"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label>{isAr ? "الاسم *" : "Name *"}</Label>
+              <Input
+                value={quickCustomerForm.name}
+                onChange={e => setQuickCustomerForm(f => ({ ...f, name: e.target.value }))}
+                placeholder={isAr ? "اسم العميل" : "Customer name"}
+                autoFocus
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>{isAr ? "رقم الجوال" : "Phone"}</Label>
+              <Input
+                value={quickCustomerForm.phone}
+                onChange={e => setQuickCustomerForm(f => ({ ...f, phone: e.target.value }))}
+                placeholder="05xxxxxxxx"
+                dir="ltr"
+                type="tel"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>{isAr ? "البريد الإلكتروني" : "Email"}</Label>
+              <Input
+                value={quickCustomerForm.email}
+                onChange={e => setQuickCustomerForm(f => ({ ...f, email: e.target.value }))}
+                placeholder="email@example.com"
+                dir="ltr"
+                type="email"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowQuickCustomer(false)}>{t("common.cancel")}</Button>
+            <Button
+              onClick={() => {
+                if (!quickCustomerForm.name.trim()) { toast.error(isAr ? "يرجى إدخال الاسم" : "Name required"); return; }
+                createCustomer.mutate(quickCustomerForm);
+              }}
+              disabled={createCustomer.isPending}
+            >
+              {createCustomer.isPending ? t("common.loading") : t("common.save")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Barcode Label Print ────────────────────────────────────────── */}
+      {showPrintLabel && (
+        <BarcodeLabel product={showPrintLabel} onClose={() => setShowPrintLabel(null)} />
       )}
     </div>
   );
