@@ -31,8 +31,8 @@ export default function Invoices() {
   });
 
   const sendWhatsApp = trpc.invoices.sendWhatsApp.useMutation({
-    onSuccess: () => toast.success(isAr ? "تم إرسال الفاتورة عبر الواتساب" : "Invoice sent via WhatsApp"),
-    onError: () => toast.error(isAr ? "فشل الإرسال" : "Send failed"),
+    onSuccess: () => toast.success(isAr ? "✅ تم إرسال الفاتورة عبر الواتساب" : "✅ Invoice sent via WhatsApp"),
+    onError: (err: any) => toast.error(err?.message || (isAr ? "❌ فشل إرسال الواتساب" : "❌ WhatsApp send failed")),
   });
 
   const cancelInvoice = trpc.invoices.cancel.useMutation({
@@ -194,7 +194,7 @@ export default function Invoices() {
                         <Printer size={13} />
                       </Button>
                       {inv.customerPhone && (
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-green-600" onClick={() => sendWhatsApp.mutate({ invoiceId: inv.id, phone: inv.customerPhone })}>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-green-600" onClick={() => sendWhatsApp.mutate({ invoiceId: inv.id, phone: inv.customerPhone || "", origin: window.location.origin })}>
                           <MessageCircle size={13} />
                         </Button>
                       )}
@@ -309,7 +309,7 @@ export default function Invoices() {
             )}
             {selectedInvoice?.customerPhone && (
               <Button variant="outline" className="gap-2 text-green-600 border-green-200"
-                onClick={() => sendWhatsApp.mutate({ invoiceId: selectedInvoice.id, phone: selectedInvoice.customerPhone })}>
+                onClick={() => sendWhatsApp.mutate({ invoiceId: selectedInvoice.id, phone: selectedInvoice.customerPhone || "", origin: window.location.origin })}>
                 <MessageCircle size={14} />
                 {t("pos.sendWhatsApp")}
               </Button>

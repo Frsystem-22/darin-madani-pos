@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Loader2, Printer, Share2, ArrowRight } from "lucide-react";
@@ -50,6 +50,7 @@ export default function InvoicePrint() {
   const [, navigate] = useLocation();
   const barcodeRef = useRef<SVGSVGElement>(null);
   const qrRef = useRef<HTMLImageElement>(null);
+  const [barcodeReady, setBarcodeReady] = useState(false);
 
   // Support both numeric id and token (for public sharing links)
   const isNumericId = /^\d+$/.test(id || "");
@@ -70,17 +71,28 @@ export default function InvoicePrint() {
   const { data: settingsData } = trpc.settings.get.useQuery();
 
   useEffect(() => {
-    if (invoice && barcodeRef.current) {
-      JsBarcode(barcodeRef.current, invoice.invoiceNumber || `INV-${invoice.id}`, {
-        format: "CODE128",
-        width: 1.5,
-        height: 40,
-        displayValue: true,
-        fontSize: 10,
-        margin: 4,
-        background: "transparent",
-      });
-    }
+    if (!invoice) return;
+    // Small delay to ensure SVG is mounted in DOM
+    const timer = setTimeout(() => {
+      if (barcodeRef.current) {
+        try {
+          JsBarcode(barcodeRef.current, invoice.invoiceNumber || `INV-${invoice.id}`, {
+            format: "CODE128",
+            width: 1.8,
+            height: 50,
+            displayValue: true,
+            fontSize: 12,
+            margin: 6,
+            background: "#ffffff",
+            lineColor: "#1a1a1a",
+          });
+          setBarcodeReady(true);
+        } catch (e) {
+          console.error("Barcode generation error:", e);
+        }
+      }
+    }, 300);
+    return () => clearTimeout(timer);
   }, [invoice]);
 
   useEffect(() => {
@@ -171,15 +183,26 @@ export default function InvoicePrint() {
         {/* الرأس الذهبي */}
         <div className="bg-[#1a1a1a] px-8 py-6 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <img
-              src={LOGO_DARK}
-              alt="Darin Madani"
-              className="h-16 w-auto object-contain"
-              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-            />
+            {/* شعار المتجر: من الإعدادات أو الشعار الافتراضي */}
+            {(store?.storeLogo || LOGO_DARK) && (
+              <img
+                src={store?.storeLogo || LOGO_DARK}
+                alt={storeName}
+                className="h-16 w-auto object-contain"
+                onError={(e) => {
+                  const img = e.target as HTMLImageElement;
+                  // Try fallback logo
+                  if (img.src !== LOGO_DARK) {
+                    img.src = LOGO_DARK;
+                  } else {
+                    img.style.display = "none";
+                  }
+                }}
+              />
+            )}
             <div>
               <h1 className="text-[#C9A96E] font-bold text-xl tracking-widest uppercase">
-                Darin Madani
+                {storeName}
               </h1>
               <p className="text-[#C9A96E]/70 text-xs tracking-widest uppercase">Fashion House</p>
             </div>
@@ -313,9 +336,18 @@ export default function InvoicePrint() {
           </div>
 
           {/* باركود الفاتورة */}
-          <div className="flex flex-col items-center gap-2 pt-2 border-t border-gray-100">
-            <svg ref={barcodeRef} className="max-w-xs" />
-            <p className="text-xs text-gray-400">
+          <div className="flex flex-col items-center gap-2 pt-4 border-t border-gray-100">
+            <p className="text-xs text-[#C9A96E] font-bold uppercase tracking-wider mb-1">باركود الفاتورة</p>
+            <div className="bg-white border border-gray-200 rounded-xl p-3 flex flex-col items-center">
+              <svg ref={barcodeRef} className="max-w-xs" style={{ minHeight: barcodeReady ? 'auto' : '60px', minWidth: '200px' }} />
+              {!barcodeReady && (
+                <div className="flex items-center gap-2 text-gray-400 text-xs py-2">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  <span>جاري توليد الباركود...</span>
+                </div>
+              )}
+            </div>
+            <p className="text-xs text-gray-500 font-mono">
               {invoice.invoiceNumber || `INV-${invoice.id}`}
             </p>
           </div>

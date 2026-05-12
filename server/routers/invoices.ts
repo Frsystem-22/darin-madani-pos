@@ -13,19 +13,35 @@ import axios from "axios";
 
 // ─── WhatsApp via Evolution API ─────────────────────────────────────────────
 async function sendWhatsApp(phone: string, message: string, settings: any): Promise<boolean> {
-  if (!settings?.whatsappEnabled || !settings?.whatsappInstance) return false;
+  // Get instance from settings (saved by whatsapp router) or from whatsappInstance field
+  const instanceName = settings?.whatsappInstance;
+  if (!instanceName) {
+    console.log("[WhatsApp] No instance configured");
+    return false;
+  }
+  // Use env vars (same as whatsapp router) as primary, settings fields as fallback
+  const base = process.env.WHATSAPP_API_BASE || settings?.whatsappApiBase || "https://elv.academy-smart.com";
+  const apiKey = process.env.WHATSAPP_API_KEY || settings?.whatsappApiKey || "BQYHJGJHJ";
   try {
     let num = phone.replace(/[^0-9]/g, "");
-    if (num.startsWith("0")) num = "966" + num.slice(1);
-    if (num.length < 10) return false;
-    const base = settings.whatsappApiBase || "https://elv.academy-smart.com";
+    if (num.startsWith("0") && num.length === 10) num = "966" + num.slice(1);
+    else if (num.length === 9) num = "966" + num;
+    if (num.length < 10) {
+      console.log("[WhatsApp] Invalid phone number:", phone);
+      return false;
+    }
+    console.log(`[WhatsApp] Sending to ${num} via instance ${instanceName}`);
     const res = await axios.post(
-      `${base}/message/sendText/${settings.whatsappInstance}`,
+      `${base}/message/sendText/${instanceName}`,
       { number: num, text: message },
-      { headers: { "Content-Type": "application/json", apikey: settings.whatsappApiKey }, timeout: 15000 }
+      { headers: { "Content-Type": "application/json", apikey: apiKey }, timeout: 15000 }
     );
+    console.log(`[WhatsApp] Response: ${res.status}`, JSON.stringify(res.data).slice(0, 200));
     return res.status >= 200 && res.status < 300;
-  } catch { return false; }
+  } catch (e: any) {
+    console.error("[WhatsApp] Send error:", e?.response?.data || e?.message);
+    return false;
+  }
 }
 
 // ─── MyFatoorah ─────────────────────────────────────────────────────────────
@@ -242,8 +258,14 @@ export const invoicesRouter = router({
     const sent = await sendWhatsApp(input.phone, message, settings);
     if (sent) {
       await updateInvoice(input.invoiceId, { whatsappSent: true, whatsappSentAt: new Date() });
+      return { success: true };
+    } else {
+      // Check why it failed
+      if (!settings?.whatsappInstance) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "واتساب غير مربوط. يرجى ربط الواتساب من صفحة الإعدادات" });
+      }
+      throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "فشل إرسال الرسالة عبر واتساب. تحقق من اتصال الواتساب ورقم الهاتف" });
     }
-    return { success: sent };
   }),
 
   createPaymentLink: protectedProcedure.input(z.object({
