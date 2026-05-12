@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Plus, Trash2, Edit, Save, Store, MessageCircle, CreditCard, Package, Tag } from "lucide-react";
+import WhatsAppSetup from "@/components/WhatsAppSetup";
 
 export default function Settings() {
   const { t, i18n } = useTranslation();
@@ -140,35 +141,35 @@ export default function Settings() {
 
         {/* WhatsApp Settings */}
         <TabsContent value="whatsapp" className="mt-4">
-          <Card>
-            <CardHeader><CardTitle className="text-base">{isAr ? "إعدادات الواتساب (Evolution API)" : "WhatsApp Settings (Evolution API)"}</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center gap-2">
-                <Switch checked={form.whatsappEnabled || false} onCheckedChange={v => setForm((f: any) => ({ ...f, whatsappEnabled: v }))} />
-                <Label>{isAr ? "تفعيل الواتساب" : "Enable WhatsApp"}</Label>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-4">
+            {/* QR Connection Card */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <span className="text-[#25d366] text-xl">📱</span>
+                  {isAr ? "ربط واتساب مباشرة" : "Connect WhatsApp Directly"}
+                </CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  {isAr ? "ادخل بيانات Evolution API ثم امسح QR Code من هاتفك" : "Enter Evolution API credentials then scan QR Code from your phone"}
+                </p>
+              </CardHeader>
+              <CardContent>
+                <WhatsAppSetup />
+              </CardContent>
+            </Card>
+            {/* Message Template */}
+            <Card>
+              <CardHeader><CardTitle className="text-base">{isAr ? "قالب رسالة الفاتورة" : "Invoice Message Template"}</CardTitle></CardHeader>
+              <CardContent className="space-y-3">
                 <div className="space-y-1">
-                  <Label>{isAr ? "رابط API" : "API Base URL"}</Label>
-                  <Input value={form.whatsappApiBase || ""} onChange={e => setForm((f: any) => ({ ...f, whatsappApiBase: e.target.value }))} placeholder="https://elv.academy-smart.com" dir="ltr" />
+                  <Label>{isAr ? "نص الرسالة" : "Message Text"}</Label>
+                  <Textarea value={form.whatsappTemplate || ""} onChange={e => setForm((f: any) => ({ ...f, whatsappTemplate: e.target.value }))} rows={4} dir="rtl" placeholder={"🛍️ شكراً لتسوقك في *{storeName}*\n\nفاتورة رقم: *{invoiceNumber}*\nالإجمالي: *{total} ر.س*\n\n📄 رابط الفاتورة:\n{invoiceUrl}"} />
+                  <p className="text-xs text-muted-foreground">{isAr ? "المتغيرات: {storeName} {invoiceNumber} {total} {invoiceUrl}" : "Variables: {storeName} {invoiceNumber} {total} {invoiceUrl}"}</p>
                 </div>
-                <div className="space-y-1">
-                  <Label>{isAr ? "اسم الـ Instance" : "Instance Name"}</Label>
-                  <Input value={form.whatsappInstance || ""} onChange={e => setForm((f: any) => ({ ...f, whatsappInstance: e.target.value }))} dir="ltr" />
-                </div>
-                <div className="col-span-2 space-y-1">
-                  <Label>{isAr ? "مفتاح API" : "API Key"}</Label>
-                  <Input value={form.whatsappApiKey || ""} onChange={e => setForm((f: any) => ({ ...f, whatsappApiKey: e.target.value }))} type="password" dir="ltr" />
-                </div>
-                <div className="col-span-2 space-y-1">
-                  <Label>{isAr ? "قالب رسالة الفاتورة" : "Invoice Message Template"}</Label>
-                  <Textarea value={form.whatsappTemplate || ""} onChange={e => setForm((f: any) => ({ ...f, whatsappTemplate: e.target.value }))} rows={4} dir="ltr" placeholder={"🛍️ شكراً لتسوقك في *{storeName}*\n\nفاتورة رقم: *{invoiceNumber}*\nالإجمالي: *{total} {currency}*\n\n📄 رابط الفاتورة:\n{invoiceUrl}"} />
-                  <p className="text-xs text-muted-foreground">{isAr ? "المتغيرات: {storeName} {invoiceNumber} {total} {currency} {invoiceUrl}" : "Variables: {storeName} {invoiceNumber} {total} {currency} {invoiceUrl}"}</p>
-                </div>
-              </div>
-              <Button onClick={handleSave} className="gap-2"><Save className="h-4 w-4" />{t("common.save")}</Button>
-            </CardContent>
-          </Card>
+                <Button onClick={handleSave} className="gap-2"><Save className="h-4 w-4" />{t("common.save")}</Button>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         {/* Payment Settings */}

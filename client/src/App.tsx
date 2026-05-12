@@ -15,6 +15,7 @@ import Returns from "./pages/Returns";
 import Customers from "./pages/Customers";
 import Users from "./pages/Users";
 import Settings from "./pages/Settings";
+import InvoicePrint from "./pages/InvoicePrint";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { isAuthenticated, loading } = useAuth();
@@ -51,6 +52,7 @@ function Router() {
       <Route path="/customers" component={() => <ProtectedRoute component={Customers} />} />
       <Route path="/users" component={() => <ProtectedRoute component={Users} />} />
       <Route path="/settings" component={() => <ProtectedRoute component={Settings} />} />
+      <Route path="/invoice/:id" component={InvoicePrint} />
       <Route path="/warehouses" component={() => <ProtectedRoute component={Settings} />} />
       <Route path="/discounts" component={() => <ProtectedRoute component={Settings} />} />
       <Route path="/404" component={NotFound} />

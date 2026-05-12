@@ -217,6 +217,7 @@ export const invoicesRouter = router({
     invoiceId: z.number(),
     phone: z.string(),
     message: z.string().optional(),
+    origin: z.string().optional(),
   })).mutation(async ({ input }) => {
     const settings = await getSettings();
     const inv = await getInvoiceById(input.invoiceId);
@@ -224,7 +225,9 @@ export const invoicesRouter = router({
 
     const storeName = settings?.storeName || "Darin Madani Fashion House";
     const currency = settings?.currencySymbol || "ر.س";
-    const invoiceUrl = `${process.env.SITE_URL || ""}/invoice/${inv.token}`;
+    // Use origin from request, or env, or production URL as fallback
+    const siteBase = input.origin || process.env.SITE_URL || "https://darinpos-guiq96ki.manus.space";
+    const invoiceUrl = `${siteBase}/invoice/${inv.token}`;
 
     const template = settings?.whatsappTemplate ||
       `🛍️ شكراً لتسوقك في *{storeName}*\n\nفاتورة رقم: *{invoiceNumber}*\nالإجمالي: *{total} {currency}*\n\n📄 رابط الفاتورة:\n{invoiceUrl}\n\nنتطلع لخدمتك دائماً 💛`;

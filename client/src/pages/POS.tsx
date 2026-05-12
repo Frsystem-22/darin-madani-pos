@@ -72,7 +72,15 @@ export default function POS() {
   const [quickCustomerForm, setQuickCustomerForm] = useState({ name: "", phone: "", email: "" });
 
   const searchRef = useRef<HTMLInputElement>(null);
+  const [scannerActive, setScannerActive] = useState(false);
+  const [lastScanned, setLastScanned] = useState<string | null>(null);
   const utils = trpc.useUtils();
+
+  // Auto-focus search input on mount
+  useEffect(() => {
+    const timer = setTimeout(() => searchRef.current?.focus(), 300);
+    return () => clearTimeout(timer);
+  }, []);
 
   const { data: products } = trpc.products.list.useQuery({ search: search || undefined, categoryId: categoryFilter !== "all" ? parseInt(categoryFilter) : undefined });
   const { data: categories } = trpc.settings.getCategories.useQuery();
@@ -93,39 +101,75 @@ export default function POS() {
     onError: (e: any) => toast.error(e.message),
   });
 
-  // Barcode scan handler
+  // Barcode scan handler - works globally (even when search input is focused)
   useEffect(() => {
     let buffer = "";
     let lastKey = 0;
+    let scanTimer: ReturnType<typeof setTimeout> | null = null;
     const handler = (e: KeyboardEvent) => {
-      // Skip if focus is on an input (manual typing)
-      const tag = (e.target as HTMLElement)?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA") return;
       const now = Date.now();
+      // If typing too slow (>100ms between keys), it's manual typing - reset buffer
+      if (now - lastKey > 100 && buffer.length > 0) {
+        // Only reset if it's clearly manual (gap > 100ms)
+        // But don't reset if it's the first key
+      }
       if (now - lastKey > 300) buffer = "";
       lastKey = now;
-      if (e.key === "Enter" && buffer.length > 3) {
-        handleBarcodeSearch(buffer);
+
+      // Show scanner active indicator
+      if (scanTimer) clearTimeout(scanTimer);
+      setScannerActive(true);
+      scanTimer = setTimeout(() => setScannerActive(false), 1000);
+
+      if (e.key === "Enter" && buffer.length > 2) {
+        e.preventDefault();
+        const scanned = buffer.trim();
         buffer = "";
-      } else if (e.key.length === 1) {
+        // Only trigger if it looks like a barcode (fast scan)
+        if (now - lastKey < 200) {
+          handleBarcodeSearch(scanned);
+        }
+      } else if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
         buffer += e.key;
       }
     };
     window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
+    return () => {
+      window.removeEventListener("keydown", handler);
+      if (scanTimer) clearTimeout(scanTimer);
+    };
   }, [cart, warehouseId]);
 
-  const handleBarcodeSearch = useCallback((barcode: string) => {
-    if (!products) return;
-    const found = products.find((p: any) => p.barcode === barcode);
-    if (found) {
-      addToCart(found);
-      toast.success(isAr ? `تم إضافة: ${found.name}` : `Added: ${found.name}`);
-    } else {
+  const handleBarcodeSearch = useCallback(async (barcode: string) => {
+    setLastScanned(barcode);
+    setTimeout(() => setLastScanned(null), 3000);
+
+    // First try to find in already-loaded products (fast path)
+    if (products) {
+      const found = products.find((p: any) => p.barcode === barcode);
+      if (found) {
+        addToCart(found);
+        toast.success(isAr ? `✅ تم إضافة: ${found.name}` : `✅ Added: ${found.name}`);
+        return;
+      }
+    }
+    // Fallback: search by barcode via API (handles products not in current view)
+    try {
+      const result = await utils.products.getByBarcode.fetch({ barcode });
+      if (result) {
+        addToCart(result);
+        toast.success(isAr ? `✅ تم إضافة: ${result.name}` : `✅ Added: ${result.name}`);
+      } else {
+        toast.error(isAr ? `❌ لم يُعثر على منتج بالباركود: ${barcode}` : `❌ No product found for barcode: ${barcode}`);
+        setSearch(barcode);
+        setTimeout(() => setSearch(""), 3000);
+      }
+    } catch {
+      toast.error(isAr ? `❌ لم يُعثر على منتج بالباركود: ${barcode}` : `❌ No product found for barcode: ${barcode}`);
       setSearch(barcode);
       setTimeout(() => setSearch(""), 3000);
     }
-  }, [products, isAr]);
+  }, [products, isAr, utils, warehouseId]);
 
   const addToCart = (product: any) => {
     const stock = product.stock?.find((s: any) => s.warehouseId === warehouseId);
@@ -269,7 +313,7 @@ export default function POS() {
     const phone = completedInvoice?.customer?.phone || selectedCustomer?.phone;
     if (!phone) { toast.error(isAr ? "لا يوجد رقم هاتف للعميل" : "No customer phone"); return; }
     try {
-      await sendWhatsApp.mutateAsync({ invoiceId: completedInvoice.id, phone });
+      await sendWhatsApp.mutateAsync({ invoiceId: completedInvoice.id, phone, origin: window.location.origin });
       toast.success(isAr ? "تم إرسال الفاتورة عبر الواتساب" : "Invoice sent via WhatsApp");
     } catch {
       toast.error(isAr ? "فشل إرسال الواتساب" : "WhatsApp send failed");
@@ -345,6 +389,24 @@ export default function POS() {
       <div className="flex-1 flex flex-col border-e border-border overflow-hidden">
         {/* Search & filters */}
         <div className="p-3 border-b border-border space-y-2 bg-card shrink-0">
+          {/* Scanner status indicator */}
+          <div className={cn(
+            "flex items-center gap-2 text-xs px-2 py-1 rounded-md transition-all duration-300",
+            scannerActive
+              ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+              : "bg-muted/50 text-muted-foreground"
+          )}>
+            <Barcode size={12} className={scannerActive ? "text-green-600 animate-pulse" : ""} />
+            <span>
+              {scannerActive
+                ? (isAr ? "جاري مسح الباركود..." : "Scanning barcode...")
+                : (isAr ? "جاهز لمسح الباركود" : "Ready to scan barcode")
+              }
+            </span>
+            {lastScanned && (
+              <span className="ms-auto font-mono text-xs opacity-70">{lastScanned}</span>
+            )}
+          </div>
           <div className="flex gap-2">
             <div className="relative flex-1">
               <Search size={15} className="absolute start-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -354,6 +416,14 @@ export default function POS() {
                 onChange={e => setSearch(e.target.value)}
                 placeholder={t("pos.searchProduct")}
                 className="ps-9 h-9"
+                onKeyDown={e => {
+                  // If Enter pressed in search box with value, treat as barcode scan
+                  if (e.key === "Enter" && search.trim().length > 2) {
+                    e.preventDefault();
+                    handleBarcodeSearch(search.trim());
+                    setSearch("");
+                  }
+                }}
               />
             </div>
             <Select value={String(warehouseId)} onValueChange={v => setWarehouseId(parseInt(v))}>
