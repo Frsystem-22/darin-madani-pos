@@ -64,6 +64,31 @@ export default function Invoices() {
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
     const items = invoice.items || [];
+    const storeSettings = (invoice as any).settings || {};
+    const storeName = isAr ? (storeSettings.storeName || "Darin Madani") : (storeSettings.storeNameEn || storeSettings.storeName || "Darin Madani");
+    const logoUrl = storeSettings.storeLogo || "/manus-storage/darin-logo-dark_7e882b9c.webp";
+    const taxNumber = storeSettings.taxNumber || "";
+    // Build ZATCA TLV QR
+    function buildZATCATLV() {
+      function tlv(tag: number, value: string): number[] {
+        const enc = new TextEncoder();
+        const valBytes = Array.from(enc.encode(String(value)));
+        return [tag, valBytes.length, ...valBytes];
+      }
+      const bytes = [
+        ...tlv(1, storeName),
+        ...tlv(2, taxNumber),
+        ...tlv(3, invoice.createdAt ? new Date(invoice.createdAt).toISOString() : new Date().toISOString()),
+        ...tlv(4, Number(invoice.total).toFixed(2)),
+        ...tlv(5, Number(invoice.taxAmount || 0).toFixed(2)),
+      ];
+      let binary = "";
+      bytes.forEach(b => binary += String.fromCharCode(b));
+      return btoa(binary);
+    }
+    const zatcaBase64 = buildZATCATLV();
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(zatcaBase64)}`;
+
     printWindow.document.write(`
       <!DOCTYPE html>
       <html dir="${isAr ? "rtl" : "ltr"}">
@@ -72,8 +97,9 @@ export default function Invoices() {
         <title>Invoice ${invoice.invoiceNumber}</title>
         <style>
           * { margin: 0; padding: 0; box-sizing: border-box; }
-          body { font-family: 'Arial', sans-serif; font-size: 11px; width: 80mm; margin: 0 auto; }
+          body { font-family: 'Arial', sans-serif; font-size: 11px; width: 80mm; margin: 0 auto; background: #fff; color: #000; }
           .header { text-align: center; padding: 4mm 0; border-bottom: 1px dashed #000; }
+          .logo { max-width: 35mm; max-height: 14mm; object-fit: contain; margin-bottom: 3px; }
           .store-name { font-size: 14px; font-weight: bold; letter-spacing: 1px; }
           .sub { font-size: 9px; color: #555; }
           .section { padding: 2mm 0; border-bottom: 1px dashed #000; }
@@ -82,14 +108,20 @@ export default function Invoices() {
           .items-table th, .items-table td { padding: 1mm; font-size: 10px; }
           .items-table th { border-bottom: 1px solid #000; font-weight: bold; }
           .total-row { font-weight: bold; font-size: 13px; }
+          .qr-section { display: flex; align-items: flex-start; gap: 3mm; padding: 2mm 0; border-bottom: 1px dashed #000; }
+          .qr-img { width: 22mm; height: 22mm; flex-shrink: 0; }
+          .qr-label { font-size: 8px; color: #666; text-align: center; margin-top: 1px; }
+          .totals-block { flex: 1; }
           .footer { text-align: center; padding: 3mm 0; font-size: 9px; color: #555; }
           @media print { body { margin: 0; } }
         </style>
       </head>
       <body>
         <div class="header">
-          <div class="store-name">DARIN MADANI</div>
+          <img src="${logoUrl}" class="logo" alt="${storeName}" onerror="this.style.display='none'" />
+          <div class="store-name">${storeName}</div>
           <div class="sub">FASHION HOUSE</div>
+          ${taxNumber ? `<div class="sub">الرقم الضريبي: ${taxNumber}</div>` : ""}
           <div class="sub" style="margin-top:2mm">${invoice.invoiceNumber}</div>
           <div class="sub">${format(new Date(invoice.createdAt), "dd/MM/yyyy HH:mm")}</div>
         </div>
@@ -116,17 +148,33 @@ export default function Invoices() {
             `).join("")}
           </tbody>
         </table>
-        <div class="section">
-          <div class="row"><span>${isAr ? "المجموع" : "Subtotal"}:</span><span>${Number(invoice.subtotal).toLocaleString()} ${currency}</span></div>
-          ${Number(invoice.discountAmount) > 0 ? `<div class="row"><span>${isAr ? "الخصم" : "Discount"}:</span><span>- ${Number(invoice.discountAmount).toLocaleString()} ${currency}</span></div>` : ""}
-          ${Number(invoice.taxAmount) > 0 ? `<div class="row"><span>${isAr ? "الضريبة" : "Tax"} (${invoice.taxRate}%):</span><span>${Number(invoice.taxAmount).toLocaleString()} ${currency}</span></div>` : ""}
-          <div class="row total-row"><span>${isAr ? "الإجمالي" : "Total"}:</span><span>${Number(invoice.total).toLocaleString()} ${currency}</span></div>
+        <!-- QR ZATCA والإجماليات -->
+        <div class="qr-section">
+          <div>
+            <img src="${qrUrl}" class="qr-img" alt="QR ZATCA" onerror="this.style.display='none'" />
+            <div class="qr-label">${isAr ? "رمز ZATCA" : "ZATCA QR"}</div>
+          </div>
+          <div class="totals-block">
+            <div class="row"><span>${isAr ? "المجموع" : "Subtotal"}:</span><span>${Number(invoice.subtotal).toLocaleString()} ${currency}</span></div>
+            ${Number(invoice.discountAmount) > 0 ? `<div class="row"><span>${isAr ? "الخصم" : "Discount"}:</span><span>- ${Number(invoice.discountAmount).toLocaleString()} ${currency}</span></div>` : ""}
+            ${Number(invoice.taxAmount) > 0 ? `<div class="row"><span>${isAr ? "الضريبة" : "Tax"} (${invoice.taxRate}%):</span><span>${Number(invoice.taxAmount).toLocaleString()} ${currency}</span></div>` : ""}
+            <div class="row total-row"><span>${isAr ? "الإجمالي" : "Total"}:</span><span>${Number(invoice.total).toLocaleString()} ${currency}</span></div>
+          </div>
         </div>
         <div class="footer">
           <p>${isAr ? "شكراً لزيارتكم" : "Thank you for your visit"}</p>
           <p>Darin Madani Fashion House</p>
         </div>
-        <script>window.onload = function() { window.print(); window.close(); };</script>
+        <script>
+          window.onload = function() {
+            var imgs = document.querySelectorAll('img');
+            var total = imgs.length;
+            var loaded = 0;
+            function tryPrint() { loaded++; if (loaded >= total) { setTimeout(function() { window.print(); window.close(); }, 300); } }
+            if (total === 0) { setTimeout(function() { window.print(); window.close(); }, 300); }
+            imgs.forEach(function(img) { img.onload = tryPrint; img.onerror = tryPrint; });
+          };
+        <\/script>
       </body>
       </html>
     `);

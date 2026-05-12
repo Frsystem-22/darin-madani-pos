@@ -309,15 +309,16 @@ export async function getInvoiceById(id: number) {
   const r = await db.select().from(invoices).where(eq(invoices.id, id)).limit(1);
   if (!r[0]) return undefined;
   const items = await db.select().from(invoiceItems).where(eq(invoiceItems.invoiceId, id));
-  return { ...r[0], items };
+  const settingsRows = await db.select().from(settings).limit(1);
+  return { ...r[0], items, settings: settingsRows[0] || null };
 }
-
 export async function getInvoiceByToken(token: string) {
   const db = await getDb(); if (!db) return undefined;
   const r = await db.select().from(invoices).where(eq(invoices.token, token)).limit(1);
   if (!r[0]) return undefined;
   const items = await db.select().from(invoiceItems).where(eq(invoiceItems.invoiceId, r[0].id));
-  return { ...r[0], items };
+  const settingsRows = await db.select().from(settings).limit(1);
+  return { ...r[0], items, settings: settingsRows[0] || null };
 }
 
 export async function createInvoice(data: typeof invoices.$inferInsert, items: typeof invoiceItems.$inferInsert[]) {

@@ -293,7 +293,18 @@ export default function POS() {
         paymentMethod: effectiveMethod as any,
         origin: window.location.origin,
       });
-      setCompletedInvoice({ ...result, total: total.toFixed(2), customer: selectedCustomer, items: cart, settings });
+      setCompletedInvoice({
+        ...result,
+        total: total.toFixed(2),
+        subtotal: subtotalDisplay.toFixed(2),
+        discountAmount: discountAmount.toFixed(2),
+        taxRate: taxRate.toFixed(2),
+        taxAmount: taxAmount.toFixed(2),
+        createdAt: new Date(),
+        customer: selectedCustomer,
+        items: cart,
+        settings,
+      });
       setShowPayDialog(false);
       setShowSuccessDialog(true);
       setCart([]);
@@ -324,55 +335,115 @@ export default function POS() {
     if (!completedInvoice) return;
     const inv = completedInvoice;
     const storeName = isAr ? (settings?.storeName || "Darin Madani") : (settings?.storeNameEn || settings?.storeName || "Darin Madani");
+    const logoUrl = settings?.storeLogo || "/manus-storage/darin-logo-dark_7e882b9c.webp";
+    const taxNumber = settings?.taxNumber || "";
+    const invoiceTotal = Number(inv.total);
+    const invoiceTaxAmount = Number(inv.taxAmount || 0);
+    const invoiceDiscountAmount = Number(inv.discountAmount || 0);
+    const invoiceTaxRate = Number(inv.taxRate || 0);
+    const invoiceDate = inv.createdAt ? new Date(inv.createdAt).toISOString() : new Date().toISOString();
+
+    // Build ZATCA TLV QR
+    function buildZATCATLV() {
+      function tlv(tag: number, value: string): number[] {
+        const enc = new TextEncoder();
+        const valBytes = Array.from(enc.encode(String(value)));
+        return [tag, valBytes.length, ...valBytes];
+      }
+      const bytes = [
+        ...tlv(1, storeName),
+        ...tlv(2, taxNumber),
+        ...tlv(3, invoiceDate),
+        ...tlv(4, invoiceTotal.toFixed(2)),
+        ...tlv(5, invoiceTaxAmount.toFixed(2)),
+      ];
+      let binary = "";
+      bytes.forEach(b => binary += String.fromCharCode(b));
+      return btoa(binary);
+    }
+    const zatcaBase64 = buildZATCATLV();
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(zatcaBase64)}`;
+
     const printContent = `
       <html dir="${isAr ? "rtl" : "ltr"}">
       <head>
         <meta charset="utf-8">
         <style>
           * { margin: 0; padding: 0; box-sizing: border-box; }
-          body { font-family: 'Courier New', monospace; font-size: 12px; width: 58mm; padding: 4mm; }
+          body { font-family: 'Courier New', monospace; font-size: 12px; width: 58mm; padding: 4mm; background: #fff; color: #000; }
           .center { text-align: center; }
           .bold { font-weight: bold; }
-          .divider { border-top: 1px dashed #000; margin: 3px 0; }
+          .divider { border-top: 1px dashed #000; margin: 4px 0; }
           .row { display: flex; justify-content: space-between; margin: 2px 0; }
-          .total-row { font-size: 14px; font-weight: bold; }
-          .store-name { font-size: 16px; font-weight: bold; margin-bottom: 2px; }
+          .total-row { font-size: 14px; font-weight: bold; margin: 4px 0; }
+          .store-name { font-size: 15px; font-weight: bold; margin: 3px 0 2px; }
+          .logo { max-width: 40mm; max-height: 15mm; object-fit: contain; margin-bottom: 4px; }
+          .qr-section { display: flex; align-items: flex-start; justify-content: space-between; margin: 4px 0; }
+          .qr-img { width: 22mm; height: 22mm; }
+          .totals-block { flex: 1; padding-${isAr ? "right" : "left"}: 3mm; }
+          .tax-label { font-size: 9px; color: #555; margin-top: 2px; }
         </style>
       </head>
       <body>
+        <!-- شعار المتجر -->
         <div class="center">
+          <img src="${logoUrl}" class="logo" alt="${storeName}"
+            onerror="this.style.display='none'" />
           <div class="store-name">${storeName}</div>
-          ${settings?.storePhone ? `<div>${settings.storePhone}</div>` : ""}
-          ${settings?.storeAddress ? `<div>${settings.storeAddress}</div>` : ""}
+          ${taxNumber ? `<div style="font-size:9px;">الرقم الضريبي: ${taxNumber}</div>` : ""}
+          ${settings?.storePhone ? `<div style="font-size:10px;">${settings.storePhone}</div>` : ""}
+          ${settings?.storeAddress ? `<div style="font-size:10px;">${settings.storeAddress}</div>` : ""}
         </div>
         <div class="divider"></div>
-        <div class="row"><span>${isAr ? "فاتورة رقم" : "Invoice #"}:</span><span>${inv.invoiceNumber}</span></div>
+        <div class="row"><span>${isAr ? "فاتورة رقم" : "Invoice #"}:</span><span class="bold">${inv.invoiceNumber}</span></div>
         <div class="row"><span>${isAr ? "التاريخ" : "Date"}:</span><span>${new Date().toLocaleDateString(isAr ? "ar-SA" : "en-US")}</span></div>
         ${inv.customer ? `<div class="row"><span>${isAr ? "العميل" : "Customer"}:</span><span>${inv.customer.name}</span></div>` : ""}
         <div class="divider"></div>
         ${(inv.items || []).map((item: any) => `
           <div class="bold">${item.productName}</div>
-          ${item.color || item.size ? `<div>${item.color || ""} ${item.size ? "· " + item.size : ""}</div>` : ""}
+          ${item.color || item.size ? `<div style="font-size:10px;color:#555;">${item.color || ""} ${item.size ? "· " + item.size : ""}</div>` : ""}
           <div class="row">
             <span>${item.qty} × ${Number(item.unitPrice).toLocaleString()}</span>
             <span>${Number(item.lineTotal).toLocaleString()} ${currency}</span>
           </div>
         `).join("")}
         <div class="divider"></div>
-        ${discountAmount > 0 ? `<div class="row"><span>${isAr ? "خصم" : "Discount"}:</span><span>- ${discountAmount.toFixed(2)} ${currency}</span></div>` : ""}
-        ${taxRate > 0 ? `<div class="row"><span>${isAr ? "ضريبة" : "Tax"} (${taxRate}%):</span><span>${taxAmount.toFixed(2)} ${currency}</span></div>` : ""}
-        <div class="row total-row"><span>${isAr ? "الإجمالي" : "Total"}:</span><span>${Number(inv.total).toLocaleString()} ${currency}</span></div>
+        <!-- QR ZATCA والإجماليات -->
+        <div class="qr-section">
+          <div>
+            <img src="${qrUrl}" class="qr-img" alt="QR ZATCA"
+              onerror="this.parentElement.innerHTML='<div style=\'font-size:8px;color:#999;\'>QR</div>'" />
+            <div class="tax-label center">${isAr ? "رمز ZATCA" : "ZATCA QR"}</div>
+          </div>
+          <div class="totals-block">
+            ${invoiceDiscountAmount > 0 ? `<div class="row"><span>${isAr ? "خصم" : "Disc"}:</span><span>-${invoiceDiscountAmount.toFixed(2)}</span></div>` : ""}
+            ${invoiceTaxRate > 0 ? `<div class="row"><span>${isAr ? `ضريبة ${invoiceTaxRate}%` : `Tax ${invoiceTaxRate}%`}:</span><span>${invoiceTaxAmount.toFixed(2)}</span></div>` : ""}
+            <div class="row total-row"><span>${isAr ? "الإجمالي" : "Total"}:</span><span>${Number(inv.total).toLocaleString()} ${currency}</span></div>
+          </div>
+        </div>
         <div class="divider"></div>
-        ${settings?.invoiceNote ? `<div class="center" style="font-size:10px;margin-top:4px;">${settings.invoiceNote}</div>` : ""}
-        <div class="center" style="margin-top:6px;font-size:10px;">${isAr ? "شكراً لزيارتكم" : "Thank you for your visit"}</div>
+        ${settings?.invoiceNote ? `<div class="center" style="font-size:10px;margin-top:3px;">${settings.invoiceNote}</div>` : ""}
+        <div class="center" style="margin-top:5px;font-size:10px;">${isAr ? "شكراً لزيارتكم" : "Thank you for your visit"}</div>
+        <script>
+          window.onload = function() {
+            // Wait for QR image to load before printing
+            var qrImg = document.querySelector('.qr-img');
+            var logo = document.querySelector('.logo');
+            var loaded = 0;
+            var total = 2;
+            function tryPrint() { loaded++; if (loaded >= total) { setTimeout(function() { window.print(); window.close(); }, 300); } }
+            if (qrImg) { qrImg.onload = tryPrint; qrImg.onerror = tryPrint; } else { loaded++; }
+            if (logo) { logo.onload = tryPrint; logo.onerror = tryPrint; } else { loaded++; }
+            if (loaded >= total) tryPrint();
+          };
+        <\/script>
       </body>
       </html>
     `;
-    const win = window.open("", "_blank", "width=300,height=600");
+    const win = window.open("", "_blank", "width=300,height=700");
     if (win) {
       win.document.write(printContent);
       win.document.close();
-      setTimeout(() => { win.print(); win.close(); }, 500);
     }
   };
 

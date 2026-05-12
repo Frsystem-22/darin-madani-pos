@@ -128,11 +128,12 @@ export default function InvoicePrint() {
     );
   }
 
-  const store = settingsData;
+  // Use settings embedded in invoice response (from db.ts), or fallback to separate query
+  const store = (invoice as any)?.settings || settingsData;
   const storeName = store?.storeName || "Darin Madani Fashion House";
   const storePhone = store?.storePhone || "";
   const storeAddress = store?.storeAddress || "";
-    const vatNumber = store?.taxNumber || "";
+  const vatNumber = store?.taxNumber || "";
   const taxRate = Number(store?.taxRate || 15);
   const priceIncludesTax = store?.priceIncludesTax ?? true;
 
