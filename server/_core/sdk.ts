@@ -325,16 +325,22 @@ function buildCronUser(
   return {
     id: -1,
     openId: userInfo.openId,
+    username: null,
     name: userInfo.name || "Manus Scheduled Task",
+    nameEn: null,
     email: null,
+    phone: null,
+    passwordHash: null,
     loginMethod: null,
-    role: "user",
+    role: "admin" as const,
+    isActive: true,
+    language: "ar" as const,
     createdAt: now,
     updatedAt: now,
     lastSignedIn: now,
     taskUid: userInfo.taskUid ?? undefined,
     isCron: true,
-  } as AuthenticatedUser;
+  } as unknown as AuthenticatedUser;
 }
 
 export const sdk = new SDKServer();
