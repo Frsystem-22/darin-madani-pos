@@ -25,10 +25,16 @@ export default function Invoices() {
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
   const [showDetail, setShowDetail] = useState(false);
 
-  const { data: invoices, refetch } = trpc.invoices.list.useQuery({
-    search: search || undefined,
-    status: statusFilter !== "all" ? statusFilter : undefined,
-  });
+  const { data: invoices, refetch } = trpc.invoices.list.useQuery(
+    {
+      search: search || undefined,
+      status: statusFilter !== "all" ? statusFilter : undefined,
+    },
+    {
+      // Auto-refresh every 10s to catch electronic payment confirmations
+      refetchInterval: 10000,
+    }
+  );
 
   const sendWhatsApp = trpc.invoices.sendWhatsApp.useMutation({
     onSuccess: () => toast.success(isAr ? "✅ تم إرسال الفاتورة عبر الواتساب" : "✅ Invoice sent via WhatsApp"),
@@ -232,7 +238,16 @@ export default function Invoices() {
                   </TableCell>
                   <TableCell className="text-sm">{paymentLabel(inv.paymentMethod)}</TableCell>
                   <TableCell className="font-bold text-primary">{Number(inv.total).toLocaleString()} {currency}</TableCell>
-                  <TableCell>{statusBadge(inv.status)}</TableCell>
+                  <TableCell>
+                    <div className="flex flex-col gap-1">
+                      {statusBadge(inv.status)}
+                      {inv.paymentMethod === "electronic" && (
+                        <Badge variant={inv.paymentStatus === "paid" ? "default" : "outline"} className={inv.paymentStatus === "paid" ? "bg-green-600 text-white text-xs" : "text-yellow-600 border-yellow-400 text-xs"}>
+                          {inv.paymentStatus === "paid" ? (isAr ? "مدفوع" : "Paid") : (isAr ? "بانتظار السداد" : "Awaiting Payment")}
+                        </Badge>
+                      )}
+                    </div>
+                  </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1">
                       <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setSelectedInvoice(inv); setShowDetail(true); }}>

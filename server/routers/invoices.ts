@@ -167,7 +167,8 @@ export const invoicesRouter = router({
       taxAmount: input.taxAmount || "0",
       total: input.total,
       paymentMethod: input.paymentMethod || "cash",
-      paymentStatus: "paid" as const,
+      // Electronic payments start as pending until confirmed by MyFatoorah callback
+      paymentStatus: (input.paymentMethod === "electronic" ? "pending" : "paid") as any,
       status: "completed" as const,
       notes: input.notes,
       cashierId: ctx.user.id,
@@ -354,5 +355,51 @@ export const invoicesRouter = router({
     await updateInvoice(input.invoiceId, { status: "returned", paymentStatus: "refunded" });
 
     return { success: true, id, returnNumber };
+  }),
+
+  // ─── Check MyFatoorah payment status (for polling from frontend) ──────────
+  checkPaymentStatus: protectedProcedure.input(z.object({
+    invoiceId: z.number(),
+  })).query(async ({ input }) => {
+    const inv = await getInvoiceById(input.invoiceId);
+    if (!inv) throw new TRPCError({ code: "NOT_FOUND" });
+    // If already marked paid, return immediately
+    if (inv.paymentStatus === "paid" && inv.mfStatus === "CAPTURED") {
+      return { paid: true, paymentStatus: "paid", mfStatus: "CAPTURED", mfPaymentUrl: inv.mfPaymentUrl, mfQrCode: inv.mfQrCode };
+    }
+    // If no MF invoice ID yet, just return current status
+    if (!inv.mfInvoiceId) {
+      return { paid: inv.paymentStatus === "paid", paymentStatus: inv.paymentStatus, mfStatus: inv.mfStatus, mfPaymentUrl: inv.mfPaymentUrl, mfQrCode: inv.mfQrCode };
+    }
+    // Query MyFatoorah for latest status
+    const settings = await getSettings();
+    if (!settings?.myfatoorahToken) {
+      return { paid: inv.paymentStatus === "paid", paymentStatus: inv.paymentStatus, mfStatus: inv.mfStatus, mfPaymentUrl: inv.mfPaymentUrl, mfQrCode: inv.mfQrCode };
+    }
+    try {
+      const isLive = settings.myfatoorahEnv === "live";
+      const base = isLive ? "https://api.myfatoorah.com" : "https://apitest.myfatoorah.com";
+      const res = await axios.post(`${base}/v2/GetPaymentStatus`,
+        { Key: inv.mfInvoiceId, KeyType: "InvoiceId" },
+        { headers: { Authorization: `Bearer ${settings.myfatoorahToken}`, "Content-Type": "application/json" }, timeout: 10000 }
+      );
+      const data = res.data?.Data;
+      const mfStatus = data?.InvoiceStatus || "";
+      const transStatus = data?.InvoiceTransactions?.[0]?.TransactionStatus || "";
+      const isPaid = mfStatus === "Paid" || transStatus === "Succss" || transStatus === "Success";
+      if (isPaid && inv.paymentStatus !== "paid") {
+        await updateInvoice(input.invoiceId, { paymentStatus: "paid", mfStatus: "CAPTURED" });
+      }
+      return {
+        paid: isPaid,
+        paymentStatus: isPaid ? "paid" : (inv.paymentStatus || "pending"),
+        mfStatus: isPaid ? "CAPTURED" : mfStatus,
+        mfPaymentUrl: inv.mfPaymentUrl,
+        mfQrCode: inv.mfQrCode,
+      };
+    } catch (e: any) {
+      console.error("[MF] checkPaymentStatus error:", e?.message);
+      return { paid: inv.paymentStatus === "paid", paymentStatus: inv.paymentStatus, mfStatus: inv.mfStatus, mfPaymentUrl: inv.mfPaymentUrl, mfQrCode: inv.mfQrCode };
+    }
   }),
 });

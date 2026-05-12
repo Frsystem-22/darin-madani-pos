@@ -114,7 +114,7 @@ export default function Settings() {
                   <Input type="number" value={form.taxRate || "15"} onChange={e => setForm((f: any) => ({ ...f, taxRate: e.target.value }))} dir="ltr" />
                 </div>
                 <div className="space-y-1 flex items-center gap-2 pt-5">
-                  <Switch checked={form.priceIncludesTax || false} onCheckedChange={v => setForm((f: any) => ({ ...f, priceIncludesTax: v }))} />
+                  <Switch checked={!!(form.priceIncludesTax) && (form.priceIncludesTax as any) !== 0 && (form.priceIncludesTax as any) !== "0"} onCheckedChange={v => setForm((f: any) => ({ ...f, priceIncludesTax: v }))} />
                   <Label className="cursor-pointer">{isAr ? "الأسعار شاملة الضريبة" : "Prices include tax"}</Label>
                 </div>
                 <div className="space-y-1">

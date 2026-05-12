@@ -61,6 +61,50 @@ async function startServer() {
   });
 
   // OAuth routes removed - using independent username/password auth
+
+  // MyFatoorah payment callback - called after customer completes payment
+  app.get("/api/payment-callback", async (req: any, res: any) => {
+    try {
+      const invoiceId = parseInt(req.query.invoice_id as string);
+      const status = req.query.status as string;
+      if (!invoiceId || isNaN(invoiceId)) {
+        return res.redirect("/invoices?payment=error");
+      }
+      const { updateInvoice, getInvoiceById, getSettings } = await import("../db");
+      const settings = await getSettings();
+      if (status === "error") {
+        await updateInvoice(invoiceId, { mfStatus: "FAILED", paymentStatus: "pending" });
+        return res.redirect(`/invoices?payment=failed&id=${invoiceId}`);
+      }
+      const inv = await getInvoiceById(invoiceId);
+      if (inv && inv.mfInvoiceId && settings?.myfatoorahToken) {
+        try {
+          const axiosLib = (await import("axios")).default;
+          const isLive = settings.myfatoorahEnv === "live";
+          const base = isLive ? "https://api.myfatoorah.com" : "https://apitest.myfatoorah.com";
+          const mfRes = await axiosLib.post(`${base}/v2/GetPaymentStatus`,
+            { Key: inv.mfInvoiceId, KeyType: "InvoiceId" },
+            { headers: { Authorization: `Bearer ${settings.myfatoorahToken}`, "Content-Type": "application/json" }, timeout: 10000 }
+          );
+          const data = mfRes.data?.Data;
+          const mfStatus = data?.InvoiceStatus || "";
+          const transStatus = data?.InvoiceTransactions?.[0]?.TransactionStatus || "";
+          const isPaid = mfStatus === "Paid" || transStatus === "Succss" || transStatus === "Success";
+          if (isPaid) {
+            await updateInvoice(invoiceId, { paymentStatus: "paid", mfStatus: "CAPTURED" });
+            return res.redirect(`/invoices?payment=success&id=${invoiceId}`);
+          }
+        } catch (e: any) {
+          console.error("[Callback] MF verify error:", e?.message);
+        }
+      }
+      return res.redirect(`/invoices?payment=pending&id=${invoiceId}`);
+    } catch (e: any) {
+      console.error("[Callback] Error:", e?.message);
+      res.redirect("/invoices?payment=error");
+    }
+  });
+
   // tRPC API
   app.use(
     "/api/trpc",

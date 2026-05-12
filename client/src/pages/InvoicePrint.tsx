@@ -135,7 +135,9 @@ export default function InvoicePrint() {
   const storeAddress = store?.storeAddress || "";
   const vatNumber = store?.taxNumber || "";
   const taxRate = Number(store?.taxRate || 15);
-  const priceIncludesTax = store?.priceIncludesTax ?? true;
+  // priceIncludesTax may come as boolean true/false or as number 1/0 from MySQL
+  const rawPIT = store?.priceIncludesTax;
+  const priceIncludesTax = rawPIT === true || (rawPIT as any) === 1 || (rawPIT as any) === "1";
 
   const subtotal = Number(invoice.subtotal || 0);
   const discount = Number(invoice.discountAmount || 0);

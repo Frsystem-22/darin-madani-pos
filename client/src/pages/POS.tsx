@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import BarcodeLabel from "@/components/BarcodeLabel";
+import OnlinePaymentDialog from "@/components/OnlinePaymentDialog";
 
 interface CartItem {
   productId: number;
@@ -67,6 +68,13 @@ export default function POS() {
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
   const [showPrintLabel, setShowPrintLabel] = useState<any>(null);
 
+  // Online payment state
+  const [showOnlinePayDialog, setShowOnlinePayDialog] = useState(false);
+  const [onlinePayInvoiceId, setOnlinePayInvoiceId] = useState<number | null>(null);
+  const [onlinePayQrUrl, setOnlinePayQrUrl] = useState<string | null>(null);
+  const [onlinePayUrl, setOnlinePayUrl] = useState<string | null>(null);
+  const [onlinePayStatus, setOnlinePayStatus] = useState<"waiting" | "paid" | "failed">("waiting");
+
   // Quick add customer dialog
   const [showQuickCustomer, setShowQuickCustomer] = useState(false);
   const [quickCustomerForm, setQuickCustomerForm] = useState({ name: "", phone: "", email: "" });
@@ -90,6 +98,7 @@ export default function POS() {
 
   const createInvoice = trpc.invoices.create.useMutation();
   const sendWhatsApp = trpc.invoices.sendWhatsApp.useMutation();
+  const createPaymentLink = trpc.invoices.createPaymentLink.useMutation();
   const createCustomer = trpc.customers.create.useMutation({
     onSuccess: (newCustomer: any) => {
       utils.customers.list.invalidate();
@@ -217,7 +226,8 @@ export default function POS() {
   const removeItem = (productId: number) => setCart(prev => prev.filter(i => i.productId !== productId));
 
   // ── Tax calculations ──────────────────────────────────────────────────────
-  const priceIncludesTax = settings?.priceIncludesTax || false;
+  // priceIncludesTax may come as boolean true/false or as number 1/0 from MySQL
+  const priceIncludesTax = !!(settings?.priceIncludesTax) && (settings?.priceIncludesTax as any) !== "0" && (settings?.priceIncludesTax as any) !== 0 && (settings?.priceIncludesTax as any) !== false;
   const taxRate = parseFloat(settings?.taxRate || "0");
 
   const subtotalBeforeDiscount = cart.reduce((s, i) => s + parseFloat(i.lineTotal), 0);
@@ -306,7 +316,18 @@ export default function POS() {
         settings,
       });
       setShowPayDialog(false);
-      setShowSuccessDialog(true);
+
+      // If electronic payment, show QR dialog
+      if (effectiveMethod === "electronic" && result.mfData?.paymentUrl) {
+        setOnlinePayInvoiceId(result.id);
+        setOnlinePayQrUrl(result.mfData.qrCode || null);
+        setOnlinePayUrl(result.mfData.paymentUrl);
+        setOnlinePayStatus("waiting");
+        setShowOnlinePayDialog(true);
+      } else {
+        setShowSuccessDialog(true);
+      }
+
       setCart([]);
       setSelectedCustomer(null);
       setDiscountType("none");
@@ -1012,10 +1033,25 @@ export default function POS() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Barcode Label Print ────────────────────────────────────────── */}
+      {/* Barcode Label Print */}
       {showPrintLabel && (
         <BarcodeLabel product={showPrintLabel} onClose={() => setShowPrintLabel(null)} />
       )}
+
+      {/* ── Online Payment QR Dialog ──────────────────────────── */}
+      <OnlinePaymentDialog
+        open={showOnlinePayDialog}
+        onOpenChange={setShowOnlinePayDialog}
+        invoiceId={onlinePayInvoiceId}
+        qrUrl={onlinePayQrUrl}
+        paymentUrl={onlinePayUrl}
+        status={onlinePayStatus}
+        onStatusChange={setOnlinePayStatus}
+        onPaidConfirmed={() => setShowSuccessDialog(true)}
+        completedInvoice={completedInvoice}
+        settings={settings}
+        isAr={isAr}
+      />
     </div>
   );
 }

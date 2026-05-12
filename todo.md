@@ -111,3 +111,15 @@
 ## Bug Fixes - Round 5 (Thermal Print)
 - [x] إصلاح: الفاتورة الحرارية لا تحتوي على QR ZATCA - تم إضافة QR ZATCA والإجماليات جنباً إلى جنب
 - [x] إصلاح: الفاتورة الحرارية لا تحتوي على شعار المتجر - تم إضافة الشعار من الإعدادات مع fallback للشعار الافتراضي
+
+## Bug Fixes - Round 6 (Tax Calculation)
+- [x] إصلاح: عند تفعيل "المبالغ شاملة الضريبة" - كانت المشكلة أن MySQL يحفظ boolean كـ "0"/"1" وكان JavaScript يعامل النص "0" كـ truthy. تم إصلاح التحقق في POS.tsx وSettings.tsx وInvoicePrint.tsx
+
+## Online Payment via MyFatoorah
+- [x] Backend: إنشاء رابط دفع MyFatoorah (SendPayment) وإرجاع PaymentURL + QR Code
+- [x] Backend: callback endpoint /api/payment-callback لتحديث حالة الفاتورة عند السداد
+- [x] Backend: checkPaymentStatus procedure للـ polling من الـ frontend
+- [x] Frontend: عرض QR Code الدفع في نافذة مخصصة عند اختيار "إلكتروني"
+- [x] Frontend: إرسال رابط الدفع للعميل عبر واتساب مباشرة من نافذة الدفع
+- [x] Frontend: polling كل 5 ثوانيً للتحقق من حالة السداد وتحديث الشاشة تلقائياً
+- [x] Frontend: عرض حالة "تم السداد" بشكل تلقائي عند اكتمال السداد
