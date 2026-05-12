@@ -56,10 +56,10 @@
 - [x] Vitest unit tests (6 tests passing)
 - [x] Final checkpoint
 - [x] Push to GitHub
-- [ ] Configure MyFatoorah credentials
-- [ ] Configure Evolution WhatsApp credentials
-- [ ] Test barcode scanner with physical device
-- [ ] Test thermal printer
+- [ ] Configure MyFatoorah credentials (يتم من صفحة الإعدادات > الدفع)
+- [ ] Configure Evolution WhatsApp credentials (يتم من صفحة الإعدادات > واتساب)
+- [ ] Test barcode scanner with physical device (اختبار ميداني)
+- [ ] Test thermal printer (اختبار ميداني)
 
 ## Auth System - Independent Login (No Manus OAuth)
 - [x] إضافة حقل password (hashed) لجدول users
