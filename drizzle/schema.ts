@@ -253,6 +253,38 @@ export const invoicePayments = mysqlTable("invoice_payments", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
+// ─── PAYMENT REQUESTS (Online payment before invoice creation) ───────────────
+export const paymentRequests = mysqlTable("payment_requests", {
+  id:              int("id").autoincrement().primaryKey(),
+  token:           varchar("token", { length: 64 }).notNull().unique(),
+  // Cart snapshot (JSON)
+  cartJson:        text("cartJson").notNull(),
+  customerId:      int("customerId"),
+  customerName:    varchar("customerName", { length: 255 }),
+  customerPhone:   varchar("customerPhone", { length: 32 }),
+  warehouseId:     int("warehouseId"),
+  cashierId:       int("cashierId"),
+  subtotal:        decimal("subtotal", { precision: 12, scale: 2 }).notNull(),
+  discountAmount:  decimal("discountAmount", { precision: 10, scale: 2 }).default("0.00"),
+  taxRate:         decimal("taxRate", { precision: 5, scale: 2 }).default("0.00"),
+  taxAmount:       decimal("taxAmount", { precision: 10, scale: 2 }).default("0.00"),
+  total:           decimal("total", { precision: 12, scale: 2 }).notNull(),
+  discountType:    varchar("discountType", { length: 32 }),
+  discountValue:   decimal("discountValue", { precision: 10, scale: 2 }).default("0.00"),
+  discountId:      int("discountId"),
+  notes:           text("notes"),
+  // MyFatoorah
+  mfInvoiceId:     varchar("mfInvoiceId", { length: 128 }),
+  mfPaymentUrl:    text("mfPaymentUrl"),
+  mfQrCode:        text("mfQrCode"),
+  mfStatus:        varchar("mfStatus", { length: 32 }).default("pending"),
+  // After payment
+  invoiceId:       int("invoiceId"),  // set after invoice is created
+  status:          mysqlEnum("status", ["pending", "paid", "failed", "expired"]).default("pending"),
+  createdAt:       timestamp("createdAt").defaultNow().notNull(),
+  updatedAt:       timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
 // ─── TYPES ─────────────────────────────────────────────────────────────────
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;

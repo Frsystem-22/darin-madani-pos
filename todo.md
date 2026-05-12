@@ -126,3 +126,10 @@
 
 ## Bug Fixes - Round 7 (Settings Save)
 - [x] إصلاح: إعدادات الفاتورة لا تُحفظ - كان السبب أن form يحتوي على حقل lowStockThreshold غير موجود في الـ schema فيفشل Zod validation. تم تصفية الحقول المقبولة فقط قبل الإرسال
+
+## Online Payment Rebuild (Correct Flow)
+- [x] Backend: جدول payment_requests لتخزين طلبات الدفع المؤقتة
+- [x] Backend: createPaymentRequest procedure - ينشئ طلب دفع MyFatoorah بدون فاتورة
+- [x] Backend: callback يُنشئ الفاتورة عند السداد ويرسلها للعميل عبر واتساب
+- [x] Frontend: POS عند اختيار إلكتروني يفتح QR dialog بدون إنشاء فاتورة
+- [x] Frontend: عند تأكيد السداد تُنشأ الفاتورة تلقائياً وتُرسل للعميل وتُفرَّغ السلة

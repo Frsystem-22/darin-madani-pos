@@ -6,8 +6,8 @@ import { customersRouter } from "./routers/customers";
 import { invoicesRouter } from "./routers/invoices";
 import { usersRouter } from "./routers/users";
 import { whatsappRouter } from "./routers/whatsapp";
+import { paymentRouter } from "./routers/payment";
 import { router } from "./_core/trpc";
-
 export const appRouter = router({
   system: systemRouter,
   auth: authRouter,
@@ -17,6 +17,7 @@ export const appRouter = router({
   invoices: invoicesRouter,
   users: usersRouter,
   whatsapp: whatsappRouter,
+  payment: paymentRouter,
 });
 
 export type AppRouter = typeof appRouter;

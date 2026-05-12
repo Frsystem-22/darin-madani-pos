@@ -8,60 +8,89 @@ import { toast } from "sonner";
 interface OnlinePaymentDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  invoiceId: number | null;
+  /** Token from payment_requests table (new flow) */
+  token?: string | null;
+  /** Legacy: invoice id */
+  invoiceId?: number | null;
   qrUrl: string | null;
   paymentUrl: string | null;
   status: "waiting" | "paid" | "failed";
   onStatusChange: (status: "waiting" | "paid" | "failed") => void;
-  onPaidConfirmed: () => void;
-  completedInvoice: any;
+  /** Called when payment confirmed - should clear cart and show success */
+  onPaidConfirmed: (invoiceId?: number) => void;
+  /** Customer info for WhatsApp */
+  customerName?: string;
+  customerPhone?: string;
   settings: any;
   isAr: boolean;
+  /** Cart total for display */
+  total?: number;
 }
 
 export default function OnlinePaymentDialog({
-  open, onOpenChange, invoiceId, qrUrl, paymentUrl, status, onStatusChange,
-  onPaidConfirmed, completedInvoice, settings, isAr,
+  open, onOpenChange, token, invoiceId, qrUrl, paymentUrl, status, onStatusChange,
+  onPaidConfirmed, customerName, customerPhone, settings, isAr, total,
 }: OnlinePaymentDialogProps) {
   const utils = trpc.useUtils();
-  const sendWhatsApp = trpc.invoices.sendWhatsApp.useMutation();
 
-  // Poll payment status every 5 seconds
-  const { data: paymentStatusData } = trpc.invoices.checkPaymentStatus.useQuery(
-    { invoiceId: invoiceId! },
+  // ── NEW FLOW: poll payment_requests by token ──────────────────────────────
+  const { data: tokenStatusData } = trpc.payment.checkPaymentRequest.useQuery(
+    { token: token! },
     {
-      enabled: open && invoiceId !== null && status === "waiting",
+      enabled: open && !!token && status === "waiting",
       refetchInterval: 5000,
       refetchIntervalInBackground: false,
     }
   );
 
+  // ── LEGACY FLOW: poll invoices by id ─────────────────────────────────────
+  const { data: legacyStatusData } = trpc.invoices.checkPaymentStatus.useQuery(
+    { invoiceId: invoiceId! },
+    {
+      enabled: open && !token && invoiceId !== null && status === "waiting",
+      refetchInterval: 5000,
+      refetchIntervalInBackground: false,
+    }
+  );
+
+  // Detect payment success
   useEffect(() => {
-    if (paymentStatusData?.paid && status === "waiting") {
+    if (status !== "waiting") return;
+
+    const tokenPaid = tokenStatusData?.status === "paid";
+    const legacyPaid = legacyStatusData?.paid;
+
+    if (tokenPaid || legacyPaid) {
       onStatusChange("paid");
       toast.success(isAr ? "تم السداد بنجاح!" : "Payment successful!");
       utils.invoices.list.invalidate();
+      // Auto-confirm after 2 seconds
+      const invoiceCreatedId = tokenStatusData?.invoiceId ?? undefined;
+      setTimeout(() => {
+        onPaidConfirmed(invoiceCreatedId ?? undefined);
+      }, 2000);
     }
-  }, [paymentStatusData?.paid]);
+  }, [tokenStatusData?.status, legacyStatusData?.paid, status]);
 
+  const sendWhatsAppMsg = trpc.whatsapp.sendMessage.useMutation();
+
+  // WhatsApp send
   const handleSendPaymentLink = async () => {
-    const phone = completedInvoice?.customer?.phone || completedInvoice?.customerPhone;
+    const phone = customerPhone;
     if (!phone) {
       toast.error(isAr ? "لا يوجد رقم هاتف للعميل" : "No customer phone");
       return;
     }
+    const storeName = settings?.storeName || "Darin Madani";
+    const msg = `مرحباً *${customerName || ""}*\n\nتفضل اضغط على الرابط أدناه لإتمام سداد فاتورتك من *${storeName}*\n\nالمبلغ: ${total?.toFixed(2) || ""} ر.س\n\nرابط الدفع:\n${paymentUrl}`;
+    const formattedPhone = phone.replace(/\D/g, "").replace(/^0/, "966");
     try {
-      const storeName = settings?.storeName || "Darin Madani";
-      const msg = `مرحباً *${completedInvoice?.customerName || completedInvoice?.customer?.name || ""}*\n\nتفضل اضغط على الرابط أدناه لإتمام سداد فاتورتك من *${storeName}*\n\nرابط الدفع:\n${paymentUrl}`;
-      await sendWhatsApp.mutateAsync({
-        invoiceId: invoiceId!,
-        phone,
-        message: msg,
-        origin: window.location.origin,
-      });
+      await sendWhatsAppMsg.mutateAsync({ phone: formattedPhone, message: msg });
       toast.success(isAr ? "تم إرسال رابط الدفع عبر الواتساب" : "Payment link sent via WhatsApp");
     } catch {
-      toast.error(isAr ? "فشل إرسال الواتساب" : "WhatsApp send failed");
+      // Fallback: open WhatsApp web
+      const msgEncoded = encodeURIComponent(`رابط الدفع:\n${paymentUrl}`);
+      window.open(`https://wa.me/${formattedPhone}?text=${msgEncoded}`, "_blank");
     }
   };
 
@@ -69,7 +98,9 @@ export default function OnlinePaymentDialog({
     <Dialog open={open} onOpenChange={(o) => {
       if (!o && status === "paid") {
         onOpenChange(false);
-        onPaidConfirmed();
+      } else if (!o && status === "waiting") {
+        // Allow closing but keep polling
+        onOpenChange(false);
       } else {
         onOpenChange(o);
       }
@@ -92,19 +123,20 @@ export default function OnlinePaymentDialog({
                 <CheckCircle size={40} className="text-green-600" />
               </div>
               <p className="text-lg font-bold text-green-600">{isAr ? "تم السداد بنجاح!" : "Payment Successful!"}</p>
-              <p className="text-sm text-muted-foreground">{completedInvoice?.invoiceNumber}</p>
-              <Button className="w-full" onClick={() => {
-                onOpenChange(false);
-                onPaidConfirmed();
-              }}>
-                {isAr ? "عرض الفاتورة" : "View Invoice"}
-              </Button>
+              <p className="text-sm text-muted-foreground">{isAr ? "جاري إنشاء الفاتورة وإرسالها للعميل..." : "Creating invoice and sending to customer..."}</p>
             </div>
           ) : (
             <>
               <p className="text-sm text-muted-foreground">
                 {isAr ? "اطلب من العميل مسح الباركود أو اضغط على الرابط للدفع" : "Ask customer to scan QR or tap link to pay"}
               </p>
+
+              {/* Amount */}
+              {total && (
+                <div className="text-2xl font-bold text-primary">
+                  {total.toFixed(2)} {isAr ? "ر.س" : "SAR"}
+                </div>
+              )}
 
               {/* QR Code from MyFatoorah */}
               {qrUrl ? (
@@ -133,12 +165,11 @@ export default function OnlinePaymentDialog({
               )}
 
               {/* Send via WhatsApp */}
-              {(completedInvoice?.customer?.phone || completedInvoice?.customerPhone) && (
+              {customerPhone && (
                 <Button
                   variant="outline"
                   className="w-full gap-2 text-green-600 border-green-200 hover:bg-green-50"
                   onClick={handleSendPaymentLink}
-                  disabled={sendWhatsApp.isPending}
                 >
                   <MessageCircle size={16} />
                   {isAr ? "إرسال رابط الدفع عبر الواتساب" : "Send Payment Link via WhatsApp"}

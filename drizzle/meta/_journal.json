@@ -15,6 +15,13 @@
       "when": 1778580983356,
       "tag": "0001_many_invisible_woman",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1778597678853,
+      "tag": "0002_cold_liz_osborn",
+      "breakpoints": true
     }
   ]
 }

@@ -74,6 +74,7 @@ export default function POS() {
   const [onlinePayQrUrl, setOnlinePayQrUrl] = useState<string | null>(null);
   const [onlinePayUrl, setOnlinePayUrl] = useState<string | null>(null);
   const [onlinePayStatus, setOnlinePayStatus] = useState<"waiting" | "paid" | "failed">("waiting");
+  const [onlinePayToken, setOnlinePayToken] = useState<string | null>(null);
 
   // Quick add customer dialog
   const [showQuickCustomer, setShowQuickCustomer] = useState(false);
@@ -99,6 +100,7 @@ export default function POS() {
   const createInvoice = trpc.invoices.create.useMutation();
   const sendWhatsApp = trpc.invoices.sendWhatsApp.useMutation();
   const createPaymentLink = trpc.invoices.createPaymentLink.useMutation();
+  const createPaymentRequest = trpc.payment.createPaymentRequest.useMutation();
   const createCustomer = trpc.customers.create.useMutation({
     onSuccess: (newCustomer: any) => {
       utils.customers.list.invalidate();
@@ -276,6 +278,51 @@ export default function POS() {
 
     try {
       const effectiveMethod = paymentMode === "split" ? "mixed" : paymentMethod;
+
+      // ── ELECTRONIC PAYMENT: create payment request (no invoice yet) ────────────
+      if (effectiveMethod === "electronic") {
+        const cartSnapshot = cart.map(i => ({
+          productId: i.productId,
+          productName: i.productName,
+          productNameEn: i.productNameEn,
+          barcode: i.barcode,
+          color: i.color,
+          size: i.size,
+          qty: i.qty,
+          unitPrice: parseFloat(i.unitPrice),
+          discountPct: parseFloat(i.discountPct),
+          lineTotal: parseFloat(i.lineTotal),
+        }));
+
+        const payReq = await createPaymentRequest.mutateAsync({
+          customerId: selectedCustomer?.id,
+          customerName: selectedCustomer?.name || (isAr ? "عميل عابر" : "Walk-in"),
+          customerPhone: selectedCustomer?.phone,
+          warehouseId,
+          cartJson: JSON.stringify(cartSnapshot),
+          subtotal: subtotalDisplay,
+          discountType: discountType || undefined,
+          discountValue: parseFloat(discountValue || "0"),
+          discountAmount: discountAmount,
+          taxRate: taxRate,
+          taxAmount: taxAmount,
+          total: total,
+          notes: undefined,
+          origin: window.location.origin,
+        });
+
+        setShowPayDialog(false);
+        setOnlinePayToken(payReq.token);
+        setOnlinePayQrUrl(payReq.qrCode || null);
+        setOnlinePayUrl(payReq.paymentUrl);
+        setOnlinePayStatus("waiting");
+        setOnlinePayInvoiceId(null);
+        setShowOnlinePayDialog(true);
+        // DO NOT clear cart yet - wait for payment confirmation
+        return;
+      }
+
+      // ── OTHER PAYMENT METHODS: create invoice immediately ──────────────────
       const result = await createInvoice.mutateAsync({
         customerId: selectedCustomer?.id,
         customerName: selectedCustomer?.name || (isAr ? "عميل عابر" : "Walk-in"),
@@ -316,18 +363,7 @@ export default function POS() {
         settings,
       });
       setShowPayDialog(false);
-
-      // If electronic payment, show QR dialog
-      if (effectiveMethod === "electronic" && result.mfData?.paymentUrl) {
-        setOnlinePayInvoiceId(result.id);
-        setOnlinePayQrUrl(result.mfData.qrCode || null);
-        setOnlinePayUrl(result.mfData.paymentUrl);
-        setOnlinePayStatus("waiting");
-        setShowOnlinePayDialog(true);
-      } else {
-        setShowSuccessDialog(true);
-      }
-
+      setShowSuccessDialog(true);
       setCart([]);
       setSelectedCustomer(null);
       setDiscountType("none");
@@ -1042,15 +1078,34 @@ export default function POS() {
       <OnlinePaymentDialog
         open={showOnlinePayDialog}
         onOpenChange={setShowOnlinePayDialog}
+        token={onlinePayToken}
         invoiceId={onlinePayInvoiceId}
         qrUrl={onlinePayQrUrl}
         paymentUrl={onlinePayUrl}
         status={onlinePayStatus}
         onStatusChange={setOnlinePayStatus}
-        onPaidConfirmed={() => setShowSuccessDialog(true)}
-        completedInvoice={completedInvoice}
+        onPaidConfirmed={(paidInvoiceId) => {
+          setShowOnlinePayDialog(false);
+          setCart([]);
+          setSelectedCustomer(null);
+          setDiscountType("none");
+          setDiscountValue("");
+          setPaymentMode("single");
+          setPaymentMethod("cash");
+          setReceivedAmount("");
+          setOnlinePayToken(null);
+          if (paidInvoiceId) {
+            // Navigate to invoice
+            window.location.href = `/invoices?payment=success&id=${paidInvoiceId}`;
+          } else {
+            setShowSuccessDialog(true);
+          }
+        }}
+        customerName={selectedCustomer?.name}
+        customerPhone={selectedCustomer?.phone}
         settings={settings}
         isAr={isAr}
+        total={total}
       />
     </div>
   );

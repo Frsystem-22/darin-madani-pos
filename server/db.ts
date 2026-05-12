@@ -453,3 +453,85 @@ export async function getLowStockProducts() {
   `) as unknown as any[][];
   return (result[0] || []) as any[];
 }
+
+// ─── CREATE INVOICE FROM PAYMENT REQUEST ─────────────────────────────────────
+export async function createInvoiceFromPaymentRequest(pr: any, settings: any): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB connection failed");
+
+  // Generate invoice number
+  const count = await db.select({ id: invoices.id }).from(invoices);
+  const invoiceNumber = `INV-${String(count.length + 1).padStart(6, "0")}`;
+  const token = require("crypto").randomBytes(16).toString("hex");
+
+  // Parse cart items
+  const cartItems: any[] = JSON.parse(pr.cartJson || "[]");
+
+  // Insert invoice
+  const [result] = await db.insert(invoices).values({
+    invoiceNumber,
+    token,
+    customerId: pr.customerId,
+    customerName: pr.customerName,
+    customerPhone: pr.customerPhone,
+    warehouseId: pr.warehouseId,
+    cashierId: pr.cashierId,
+    subtotal: pr.subtotal,
+    discountType: (pr.discountType as any) || "none",
+    discountValue: pr.discountValue || "0.00",
+    discountAmount: pr.discountAmount || "0.00",
+    discountId: pr.discountId,
+    taxRate: pr.taxRate || "0.00",
+    taxAmount: pr.taxAmount || "0.00",
+    total: pr.total,
+    paymentMethod: "electronic",
+    paymentStatus: "paid",
+    status: "completed",
+    notes: pr.notes,
+    mfInvoiceId: pr.mfInvoiceId,
+    mfPaymentUrl: pr.mfPaymentUrl,
+    mfQrCode: pr.mfQrCode,
+    mfStatus: "CAPTURED",
+    whatsappSent: false,
+  } as any);
+
+  const invoiceId = (result as any).insertId;
+
+  // Insert invoice items + update stock
+  for (const item of cartItems) {
+    await db.insert(invoiceItems).values({
+      invoiceId,
+      productId: item.productId,
+      productName: item.productName,
+      productNameEn: item.productNameEn,
+      barcode: item.barcode,
+      color: item.color,
+      size: item.size,
+      qty: item.qty,
+      unitPrice: String(item.unitPrice),
+      discountPct: String(item.discountPct || 0),
+      lineTotal: String(item.lineTotal),
+    } as any);
+
+    // Deduct stock
+    if (item.productId) {
+      await addStockMovement({
+        productId: item.productId,
+        type: "sale",
+        qty: -item.qty,
+        reference: invoiceNumber,
+        warehouseId: pr.warehouseId,
+        notes: `فاتورة ${invoiceNumber}`,
+      });
+    }
+  }
+
+  // Update customer stats if applicable
+  if (pr.customerId) {
+    await updateCustomer(pr.customerId, {
+      lastPurchaseAt: new Date(),
+    } as any);
+  }
+
+  return invoiceId;
+}
