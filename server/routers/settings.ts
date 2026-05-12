@@ -35,7 +35,7 @@ export const settingsRouter = router({
     myfatoorahEnabled: z.boolean().optional(),
     myfatoorahToken: z.string().optional(),
     myfatoorahEnv: z.enum(["sandbox", "live"]).optional(),
-    myfatoorahSupplier: z.string().optional(),
+    myfatoorahSupplier: z.string().optional(), // ثابت = 24 لـ Darin Madani
   })).mutation(async ({ input }) => {
     await updateSettings(input as any);
     return { success: true };

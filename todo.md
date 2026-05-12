@@ -60,3 +60,11 @@
 - [ ] Configure Evolution WhatsApp credentials
 - [ ] Test barcode scanner with physical device
 - [ ] Test thermal printer
+
+## Auth System - Independent Login (No Manus OAuth)
+- [x] إضافة حقل password (hashed) لجدول users
+- [x] Backend: auth router مع login/logout/me بدون OAuth
+- [x] Backend: JWT middleware مستقل
+- [x] Frontend: صفحة Login بيوزر وباسورد
+- [x] Frontend: إزالة Manus OAuth من كل الصفحات
+- [x] إنشاء مستخدم admin افتراضي في قاعدة البيانات

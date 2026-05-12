@@ -1,0 +1,9 @@
+{
+  "query": "\nALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR(64);\nALTER TABLE users ADD COLUMN IF NOT EXISTS nameEn VARCHAR(255);\nALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(32);\nALTER TABLE users ADD COLUMN IF NOT EXISTS passwordHash VARCHAR(255);\nALTER TABLE users ADD COLUMN IF NOT EXISTS isActive BOOLEAN NOT NULL DEFAULT TRUE;\nALTER TABLE users ADD COLUMN IF NOT EXISTS language ENUM('ar','en') NOT NULL DEFAULT 'ar';\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway06.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3hVUzgoV1qgXfsm.53fe60abead7 --database GuiQ96KiLevK2WuhVmj7UT --execute \nALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR(64);\nALTER TABLE users ADD COLUMN IF NOT EXISTS nameEn VARCHAR(255);\nALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(32);\nALTER TABLE users ADD COLUMN IF NOT EXISTS passwordHash VARCHAR(255);\nALTER TABLE users ADD COLUMN IF NOT EXISTS isActive BOOLEAN NOT NULL DEFAULT TRUE;\nALTER TABLE users ADD COLUMN IF NOT EXISTS language ENUM('ar','en') NOT NULL DEFAULT 'ar';\n",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 3917
+}

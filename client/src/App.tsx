@@ -1,12 +1,12 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
-import { Route, Switch, Redirect } from "wouter";
+import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { useAuth } from "./_core/hooks/useAuth";
-import { getLoginUrl } from "./const";
 import AppLayout from "./components/AppLayout";
+import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import POS from "./pages/POS";
 import Inventory from "./pages/Inventory";
@@ -16,20 +16,20 @@ import Customers from "./pages/Customers";
 import Users from "./pages/Users";
 import Settings from "./pages/Settings";
 
-function ProtectedRoute({ component: Component, ...props }: { component: React.ComponentType; path?: string }) {
+function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { isAuthenticated, loading } = useAuth();
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="min-h-screen flex items-center justify-center" style={{ background: "#0a0a0a" }}>
         <div className="flex flex-col items-center gap-3">
-          <div className="w-10 h-10 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-          <p className="text-sm text-muted-foreground">جاري التحميل...</p>
+          <div className="w-10 h-10 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "#C9A96E", borderTopColor: "transparent" }} />
+          <p className="text-sm" style={{ color: "#C9A96E" }}>جاري التحميل...</p>
         </div>
       </div>
     );
   }
   if (!isAuthenticated) {
-    window.location.href = getLoginUrl();
+    window.location.href = "/login";
     return null;
   }
   return (
@@ -42,6 +42,7 @@ function ProtectedRoute({ component: Component, ...props }: { component: React.C
 function Router() {
   return (
     <Switch>
+      <Route path="/login" component={Login} />
       <Route path="/" component={() => <ProtectedRoute component={Dashboard} />} />
       <Route path="/pos" component={() => <ProtectedRoute component={POS} />} />
       <Route path="/inventory" component={() => <ProtectedRoute component={Inventory} />} />

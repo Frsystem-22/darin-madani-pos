@@ -173,27 +173,31 @@ export default function Settings() {
             <CardHeader><CardTitle className="text-base">{isAr ? "إعدادات MyFatoorah" : "MyFatoorah Settings"}</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center gap-2">
-                <Switch checked={form.myfatoorahEnabled || false} onCheckedChange={v => setForm((f: any) => ({ ...f, myfatoorahEnabled: v }))} />
+                <Switch checked={form.myfatoorahEnabled !== false} onCheckedChange={v => setForm((f: any) => ({ ...f, myfatoorahEnabled: v }))} />
                 <Label>{isAr ? "تفعيل MyFatoorah" : "Enable MyFatoorah"}</Label>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <Label>{isAr ? "البيئة" : "Environment"}</Label>
-                  <Select value={form.myfatoorahEnv || "test"} onValueChange={v => setForm((f: any) => ({ ...f, myfatoorahEnv: v }))}>
+                  <Select value={form.myfatoorahEnv || "sandbox"} onValueChange={v => setForm((f: any) => ({ ...f, myfatoorahEnv: v }))}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="test">{isAr ? "تجريبي" : "Test"}</SelectItem>
-                      <SelectItem value="live">{isAr ? "حقيقي" : "Live"}</SelectItem>
+                      <SelectItem value="sandbox">{isAr ? "تجريبي (Sandbox)" : "Sandbox (Test)"}</SelectItem>
+                      <SelectItem value="live">{isAr ? "حقيقي (Live)" : "Live (Production)"}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-1">
-                  <Label>{isAr ? "كود المورد" : "Supplier Code"}</Label>
-                  <Input value={form.myfatoorahSupplier || ""} onChange={e => setForm((f: any) => ({ ...f, myfatoorahSupplier: e.target.value }))} dir="ltr" />
+                  <Label>{isAr ? "كود المورد (Supplier Code)" : "Supplier Code"}</Label>
+                  <div className="flex items-center gap-2">
+                    <Input value="24" disabled dir="ltr" className="bg-muted font-mono" />
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">{isAr ? "ثابت" : "Fixed"}</span>
+                  </div>
                 </div>
                 <div className="col-span-2 space-y-1">
-                  <Label>{isAr ? "Token" : "API Token"}</Label>
-                  <Input value={form.myfatoorahToken || ""} onChange={e => setForm((f: any) => ({ ...f, myfatoorahToken: e.target.value }))} type="password" dir="ltr" />
+                  <Label>{isAr ? "Master Token (API)" : "Master API Token"}</Label>
+                  <Input value={form.myfatoorahToken || ""} onChange={e => setForm((f: any) => ({ ...f, myfatoorahToken: e.target.value }))} type="password" dir="ltr" placeholder="rLtt6JWvbUHDDhsZnfpAhpYk4dxYDQkbcPTyGaKp..." />
+                  <p className="text-xs text-muted-foreground">{isAr ? "احصل عليه من لوحة تحكم MyFatoorah تحت API Settings" : "Get it from MyFatoorah dashboard under API Settings"}</p>
                 </div>
               </div>
               <Button onClick={handleSave} className="gap-2"><Save className="h-4 w-4" />{t("common.save")}</Button>

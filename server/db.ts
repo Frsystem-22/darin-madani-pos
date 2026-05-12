@@ -51,6 +51,12 @@ export async function getUserById(id: number) {
   return r[0];
 }
 
+export async function getUserByUsername(username: string) {
+  const db = await getDb(); if (!db) return undefined;
+  const r = await db.select().from(users).where(eq(users.username, username)).limit(1);
+  return r[0];
+}
+
 export async function updateUser(id: number, data: Partial<InsertUser>) {
   const db = await getDb(); if (!db) return;
   await db.update(users).set(data).where(eq(users.id, id));

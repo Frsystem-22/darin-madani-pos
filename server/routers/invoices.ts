@@ -28,28 +28,38 @@ async function sendWhatsApp(phone: string, message: string, settings: any): Prom
 }
 
 // ─── MyFatoorah ─────────────────────────────────────────────────────────────
+// Supplier Code: 24 (Darin Madani Fashion House)
+const MF_SUPPLIER_CODE = 24;
+
 async function createMyfatoorahPayment(invoice: any, settings: any, origin: string) {
-  if (!settings?.myfatoorahEnabled || !settings?.myfatoorahToken) return null;
-  const base = settings.myfatoorahEnv === "live" ? "https://api.myfatoorah.com" : "https://apitest.myfatoorah.com";
+  if (!settings?.myfatoorahToken) return null;
+  const isLive = settings.myfatoorahEnv === "live";
+  const base = isLive ? "https://api.myfatoorah.com" : "https://apitest.myfatoorah.com";
   const callbackUrl = `${origin}/api/payment-callback?invoice_id=${invoice.id}`;
+  const amount = parseFloat(invoice.total);
+
+  // تنظيف رقم الجوال بنفس آلية PHP
+  let mobile = (invoice.customerPhone || "").replace(/[^0-9]/g, "");
+  if (mobile.startsWith("0") && mobile.length === 10) mobile = "966" + mobile.slice(1);
+  else if (mobile.length === 9) mobile = "966" + mobile;
+
   const payload: any = {
     CustomerName: invoice.customerName || "عميل",
-    NotificationOption: "LNK",
-    InvoiceValue: parseFloat(invoice.total),
+    NotificationOption: mobile ? "SMS" : "LNK",
+    InvoiceValue: amount,
     DisplayCurrencyIso: "SAR",
+    MobileCountryCode: "+966",
+    CustomerMobile: mobile || "0500000000",
+    CustomerEmail: invoice.customerEmail || "noreply@darinmadani.com",
     CallBackUrl: callbackUrl,
     ErrorUrl: callbackUrl + "&status=error",
     Language: "AR",
     CustomerReference: invoice.invoiceNumber,
+    InvoiceItems: [{ ItemName: `فاتورة رقم ${invoice.invoiceNumber}`, Quantity: 1, UnitPrice: amount }],
+    // Supplier Code ثابت = 24
+    Suppliers: [{ SupplierCode: MF_SUPPLIER_CODE, InvoiceShare: amount, ProposedShare: null }],
   };
-  if (invoice.customerPhone) {
-    payload.MobileCountryCode = "966";
-    payload.CustomerMobile = invoice.customerPhone.replace(/^0/, "");
-    payload.NotificationOption = "SMS";
-  }
-  if (settings.myfatoorahSupplier) {
-    payload.Suppliers = [{ SupplierCode: parseInt(settings.myfatoorahSupplier), InvoiceShare: parseFloat(invoice.total) }];
-  }
+
   try {
     const res = await axios.post(`${base}/v2/SendPayment`, payload, {
       headers: { Authorization: `Bearer ${settings.myfatoorahToken}`, "Content-Type": "application/json" },
@@ -58,7 +68,8 @@ async function createMyfatoorahPayment(invoice: any, settings: any, origin: stri
     const data = res.data?.Data;
     return { invoiceId: data?.InvoiceId, paymentUrl: data?.InvoiceURL, qrCode: data?.QrCodeUrl };
   } catch (e: any) {
-    console.error("MyFatoorah error:", e?.response?.data || e.message);
+    const errMsg = e?.response?.data?.Message || e?.response?.data?.ValidationErrors?.[0]?.Error || e.message;
+    console.error("MyFatoorah error:", errMsg);
     return null;
   }
 }
