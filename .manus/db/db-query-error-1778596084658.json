@@ -1,0 +1,8 @@
+{
+  "query": "UPDATE settings SET \n  myfatoorahToken = 'SK_SAU_KGpGEn23WvndSWq8CGzmxDydKKRuvt4d3Gk2Ko2rXJRNkQKXGCSSsSX64qDf4nWO',\n  myfatoorahSupplierCode = '24',\n  myfatoorahMode = 'live'\nWHERE id = 1;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway06.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3hVUzgoV1qgXfsm.53fe60abead7 --database GuiQ96KiLevK2WuhVmj7UT --execute UPDATE settings SET \n  myfatoorahToken = 'SK_SAU_KGpGEn23WvndSWq8CGzmxDydKKRuvt4d3Gk2Ko2rXJRNkQKXGCSSsSX64qDf4nWO',\n  myfatoorahSupplierCode = '24',\n  myfatoorahMode = 'live'\nWHERE id = 1;",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1054 (42S22) at line 1: Unknown column 'myfatoorahSupplierCode' in 'field list'"
+  ]
+}

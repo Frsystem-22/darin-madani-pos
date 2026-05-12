@@ -45,11 +45,10 @@ async function sendWhatsApp(phone: string, message: string, settings: any): Prom
 }
 
 // ─── MyFatoorah ─────────────────────────────────────────────────────────────
-// Supplier Code: 24 (Darin Madani Fashion House)
-const MF_SUPPLIER_CODE = 24;
-
+/// Supplier Code read from settings (myfatoorahSupplier)
 async function createMyfatoorahPayment(invoice: any, settings: any, origin: string) {
   if (!settings?.myfatoorahToken) return null;
+  const supplierCode = settings.myfatoorahSupplier ? Number(settings.myfatoorahSupplier) : 24;
   const isLive = settings.myfatoorahEnv === "live";
   const base = isLive ? "https://api.myfatoorah.com" : "https://apitest.myfatoorah.com";
   const callbackUrl = `${origin}/api/payment-callback?invoice_id=${invoice.id}`;
@@ -74,7 +73,7 @@ async function createMyfatoorahPayment(invoice: any, settings: any, origin: stri
     CustomerReference: invoice.invoiceNumber,
     InvoiceItems: [{ ItemName: `فاتورة رقم ${invoice.invoiceNumber}`, Quantity: 1, UnitPrice: amount }],
     // Supplier Code ثابت = 24
-    Suppliers: [{ SupplierCode: MF_SUPPLIER_CODE, InvoiceShare: amount, ProposedShare: null }],
+    Suppliers: [{ SupplierCode: supplierCode, InvoiceShare: amount, ProposedShare: null }],
   };
 
   try {
