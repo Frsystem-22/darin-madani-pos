@@ -3,7 +3,8 @@ import { TRPCError } from "@trpc/server";
 import {
   getProducts, getProductById, getProductByBarcode, createProduct,
   updateProduct, deleteProduct, getProductStock, upsertProductStock,
-  setProductStock, addStockMovement, getStockMovements, getWarehouses
+  setProductStock, addStockMovement, getStockMovements, getWarehouses,
+  reserveBarcodeSerials, getLastBarcodeSerial, getProductVariants,
 } from "../db";
 import { protectedProcedure, router } from "../_core/trpc";
 import { nanoid } from "nanoid";
@@ -179,5 +180,39 @@ export const productsRouter = router({
     warehouseId: z.number().optional(),
   })).query(async ({ input }) => {
     return await getStockMovements(input.productId, input.warehouseId);
+  }),
+
+  // ─── BARCODE SERIALS ─────────────────────────────────────────────────────────────
+  /**
+   * Reserve N sequential serial numbers for a variant barcode.
+   * Returns array of serial numbers to print on labels.
+   */
+  reserveSerials: adminOrManager.input(z.object({
+    variantBarcode: z.string().min(1),
+    qty: z.number().min(1).max(500),
+  })).mutation(async ({ input }) => {
+    const serials = await reserveBarcodeSerials(input.variantBarcode, input.qty);
+    return { serials, variantBarcode: input.variantBarcode };
+  }),
+
+  /**
+   * Get the last allocated serial for a variant barcode (for preview).
+   */
+  getLastSerial: protectedProcedure.input(z.object({
+    variantBarcode: z.string().min(1),
+  })).query(async ({ input }) => {
+    const lastSerial = await getLastBarcodeSerial(input.variantBarcode);
+    return { lastSerial, variantBarcode: input.variantBarcode };
+  }),
+
+  // ─── PRODUCT VARIANTS ─────────────────────────────────────────────────────────────
+  /**
+   * Get all variants of a product (same name, different color/size)
+   * with stock per warehouse.
+   */
+  getVariants: protectedProcedure.input(z.object({
+    productId: z.number(),
+  })).query(async ({ input }) => {
+    return await getProductVariants(input.productId);
   }),
 });

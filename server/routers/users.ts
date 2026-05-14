@@ -2,15 +2,15 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { getAllUsers, getUserById, updateUser, deleteUser, getUserPermissions, setUserPermissions, upsertUser, getDashboardStats, getTopProducts, getMonthlySales, getLowStockProducts } from "../db";
 import { protectedProcedure, router } from "../_core/trpc";
-import { createHash } from "crypto";
+import bcrypt from "bcryptjs";
 
 const adminOnly = protectedProcedure.use(({ ctx, next }) => {
   if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
   return next({ ctx });
 });
 
-function hashPassword(password: string): string {
-  return createHash("sha256").update(password + "dm_salt_2024").digest("hex");
+async function hashPassword(password: string): Promise<string> {
+  return bcrypt.hash(password, 12);
 }
 
 export const usersRouter = router({
@@ -47,7 +47,7 @@ export const usersRouter = router({
     await upsertUser({
       ...userData,
       openId,
-      passwordHash: hashPassword(password),
+      passwordHash: await hashPassword(password),
       loginMethod: "local",
       isActive: input.isActive !== false,
     } as any);
@@ -76,7 +76,7 @@ export const usersRouter = router({
     })).optional(),
   })).mutation(async ({ input: { id, password, permissions, ...data } }) => {
     const updateData: any = { ...data };
-    if (password) updateData.passwordHash = hashPassword(password);
+    if (password) updateData.passwordHash = await hashPassword(password);
     await updateUser(id, updateData);
     if (permissions) await setUserPermissions(id, permissions);
     return { success: true };

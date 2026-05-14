@@ -19,6 +19,7 @@ export default {
     users: "المستخدمون", settings: "الإعدادات", reports: "التقارير",
     warehouses: "المستودعات", categories: "التصنيفات", discounts: "الخصومات",
     stockMovements: "حركة المخزون",
+    barcode_print: "طباعة الستيكرات",
   },
   auth: {
     login: "تسجيل الدخول", logout: "تسجيل الخروج",

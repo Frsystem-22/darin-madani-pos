@@ -3,7 +3,8 @@ import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser, categories, customers, discounts, invoiceItems,
   invoices, productStock, products, returnItems, returns,
-  settings, stockMovements, userPermissions, users, warehouses
+  settings, stockMovements, userPermissions, users, warehouses,
+  barcodeSerials,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -231,6 +232,63 @@ export async function getStockMovements(productId?: number, warehouseId?: number
   if (productId) conds.push(eq(stockMovements.productId, productId));
   if (warehouseId) conds.push(eq(stockMovements.warehouseId, warehouseId));
   return db.select().from(stockMovements).where(conds.length ? and(...conds) : undefined).orderBy(desc(stockMovements.createdAt)).limit(100);
+}
+
+// ─── BARCODE SERIALS ──────────────────────────────────────────────────────────
+/**
+ * Reserve N sequential serial numbers for a variant barcode.
+ * Returns an array of serial numbers [start, start+1, ..., start+qty-1]
+ * Uses atomic increment to avoid race conditions.
+ */
+export async function reserveBarcodeSerials(variantBarcode: string, qty: number): Promise<number[]> {
+  const db = await getDb(); if (!db) return [];
+  // Upsert: if row doesn't exist, create with lastSerial=0, then increment
+  await db.insert(barcodeSerials)
+    .values({ variantBarcode, lastSerial: qty })
+    .onDuplicateKeyUpdate({ set: { lastSerial: sql`lastSerial + ${qty}` } });
+  // Read the current value after increment
+  const row = await db.select().from(barcodeSerials)
+    .where(eq(barcodeSerials.variantBarcode, variantBarcode)).limit(1);
+  const lastSerial = row[0]?.lastSerial ?? qty;
+  // Return the range [lastSerial - qty + 1, ..., lastSerial]
+  const start = lastSerial - qty + 1;
+  return Array.from({ length: qty }, (_, i) => start + i);
+}
+
+export async function getLastBarcodeSerial(variantBarcode: string): Promise<number> {
+  const db = await getDb(); if (!db) return 0;
+  const row = await db.select().from(barcodeSerials)
+    .where(eq(barcodeSerials.variantBarcode, variantBarcode)).limit(1);
+  return row[0]?.lastSerial ?? 0;
+}
+
+// ─── PRODUCT VARIANTS ──────────────────────────────────────────────────────────
+/**
+ * Get all variants of a product by matching on the same name.
+ * Returns each variant with its stock per warehouse.
+ */
+export async function getProductVariants(productId: number) {
+  const db = await getDb(); if (!db) return [];
+  // Get the base product
+  const base = await db.select().from(products).where(eq(products.id, productId)).limit(1);
+  if (!base[0]) return [];
+  const baseName = base[0].name;
+  // Find all active products with the same name
+  const variants = await db.select().from(products)
+    .where(and(eq(products.name, baseName), eq(products.isActive, true)))
+    .orderBy(products.color, products.size);
+  // Attach stock for all variants
+  const variantIds = variants.map(v => v.id);
+  if (!variantIds.length) return [];
+  const stockRows = await db.select().from(productStock)
+    .where(sql`${productStock.productId} IN (${sql.join(variantIds.map(id => sql`${id}`), sql`, `)})`);
+  const warehouseRows = await db.select().from(warehouses).where(eq(warehouses.isActive, true));
+  return variants.map(v => ({
+    ...v,
+    stock: stockRows.filter(s => s.productId === v.id),
+    totalQty: stockRows.filter(s => s.productId === v.id).reduce((a, b) => a + b.qty, 0),
+    warehouses: warehouseRows,
+  }));
 }
 
 // ─── CUSTOMERS ─────────────────────────────────────────────────────────────

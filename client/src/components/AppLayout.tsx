@@ -14,13 +14,13 @@ import { Badge } from "@/components/ui/badge";
 import {
   LayoutDashboard, ShoppingCart, Package, FileText, RotateCcw,
   Users, Settings, ChevronLeft, ChevronRight, Menu, X, Globe,
-  Moon, Sun, Warehouse, Tag, BarChart3, LogOut, User, Layers
+  Moon, Sun, Warehouse, Tag, BarChart3, LogOut, User, Layers, Barcode
 } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
 import { cn } from "@/lib/utils";
 
-const LOGO_DARK = "/manus-storage/dm-logo-dark_d99c19e3.webp";
-const LOGO_LIGHT = "/manus-storage/dm-logo-white_64c263b2.webp";
+const LOGO_DARK = "/logo-dark.webp";
+const LOGO_LIGHT = "/logo-light.webp";
 
 interface NavItem {
   key: string;
@@ -45,6 +45,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     { key: "dashboard", icon: <LayoutDashboard size={18} />, path: "/" },
     { key: "pos", icon: <ShoppingCart size={18} />, path: "/pos" },
     { key: "inventory", icon: <Package size={18} />, path: "/inventory" },
+    { key: "barcode_print", icon: <Barcode size={18} />, path: "/barcode-print" },
     { key: "invoices", icon: <FileText size={18} />, path: "/invoices" },
     { key: "returns", icon: <RotateCcw size={18} />, path: "/returns" },
     { key: "customers", icon: <Users size={18} />, path: "/customers" },
@@ -115,28 +116,28 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           {visibleItems.map(item => {
             const isActive = location === item.path || (item.path !== "/" && location.startsWith(item.path));
             return (
-              <Link key={item.key} href={item.path}>
-                <a
-                  className={cn(
-                    "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 cursor-pointer",
-                    collapsed ? "justify-center" : "",
-                    isActive
-                      ? "bg-sidebar-primary text-sidebar-primary-foreground"
-                      : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent"
-                  )}
-                  onClick={() => setMobileOpen(false)}
-                  title={collapsed ? t(`nav.${item.key}`) : undefined}
-                >
-                  <span className="shrink-0">{item.icon}</span>
-                  {!collapsed && (
-                    <span className="truncate">{t(`nav.${item.key}`)}</span>
-                  )}
-                  {!collapsed && item.key === "inventory" && (stats?.lowStockCount ?? 0) > 0 && (
-                    <Badge variant="destructive" className="ms-auto text-xs px-1.5 py-0 h-5">
-                      {stats?.lowStockCount}
-                    </Badge>
-                  )}
-                </a>
+              <Link
+                key={item.key}
+                href={item.path}
+                className={cn(
+                  "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 cursor-pointer no-underline",
+                  collapsed ? "justify-center" : "",
+                  isActive
+                    ? "bg-sidebar-primary text-sidebar-primary-foreground"
+                    : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent"
+                )}
+                onClick={() => setMobileOpen(false)}
+                title={collapsed ? t(`nav.${item.key}`) : undefined}
+              >
+                <span className="shrink-0">{item.icon}</span>
+                {!collapsed && (
+                  <span className="truncate">{t(`nav.${item.key}`)}</span>
+                )}
+                {!collapsed && item.key === "inventory" && (stats?.lowStockCount ?? 0) > 0 && (
+                  <Badge variant="destructive" className="ms-auto text-xs px-1.5 py-0 h-5">
+                    {stats?.lowStockCount}
+                  </Badge>
+                )}
               </Link>
             );
           })}

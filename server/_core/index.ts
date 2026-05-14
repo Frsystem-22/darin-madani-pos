@@ -199,16 +199,26 @@ async function startServer() {
     serveStatic(app);
   }
 
-  const preferredPort = parseInt(process.env.PORT || "3000");
-  const port = await findAvailablePort(preferredPort);
+  // IISNode on Windows provides PORT as a named pipe (e.g. \\.\pipe\...) not a number
+  // We must use it directly without parseInt
+  const rawPort = process.env.PORT;
+  const isNamedPipe = rawPort && isNaN(Number(rawPort));
 
-  if (port !== preferredPort) {
-    console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
+  if (isNamedPipe) {
+    // IISNode named pipe - listen directly
+    server.listen(rawPort, () => {
+      console.log(`Server running on named pipe: ${rawPort}`);
+    });
+  } else {
+    const preferredPort = parseInt(rawPort || "3000");
+    const port = await findAvailablePort(preferredPort);
+    if (port !== preferredPort) {
+      console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
+    }
+    server.listen(port, () => {
+      console.log(`Server running on http://localhost:${port}/`);
+    });
   }
-
-  server.listen(port, () => {
-    console.log(`Server running on http://localhost:${port}/`);
-  });
 }
 
 startServer().catch(console.error);

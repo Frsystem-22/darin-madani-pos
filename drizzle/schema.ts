@@ -133,6 +133,15 @@ export const stockMovements = mysqlTable("stock_movements", {
   createdAt:     timestamp("createdAt").defaultNow().notNull(),
 });
 
+// ─── BARCODE SERIALS ──────────────────────────────────────────────────────────
+// Tracks the last allocated serial number per variant barcode
+export const barcodeSerials = mysqlTable("barcode_serials", {
+  id:             int("id").autoincrement().primaryKey(),
+  variantBarcode: varchar("variantBarcode", { length: 128 }).notNull().unique(),
+  lastSerial:     int("lastSerial").default(0).notNull(),
+  updatedAt:      timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
 // ─── CUSTOMERS ─────────────────────────────────────────────────────────────
 export const customers = mysqlTable("customers", {
   id:        int("id").autoincrement().primaryKey(),

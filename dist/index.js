@@ -1930,13 +1930,13 @@ var invoicesRouter = router({
 init_db();
 import { z as z7 } from "zod";
 import { TRPCError as TRPCError8 } from "@trpc/server";
-import { createHash } from "crypto";
+import bcrypt2 from "bcryptjs";
 var adminOnly2 = protectedProcedure.use(({ ctx, next }) => {
   if (ctx.user.role !== "admin") throw new TRPCError8({ code: "FORBIDDEN" });
   return next({ ctx });
 });
-function hashPassword(password) {
-  return createHash("sha256").update(password + "dm_salt_2024").digest("hex");
+async function hashPassword(password) {
+  return bcrypt2.hash(password, 12);
 }
 var usersRouter = router({
   list: adminOnly2.query(async () => {
@@ -1970,7 +1970,7 @@ var usersRouter = router({
     await upsertUser({
       ...userData,
       openId,
-      passwordHash: hashPassword(password),
+      passwordHash: await hashPassword(password),
       loginMethod: "local",
       isActive: input.isActive !== false
     });
@@ -1998,7 +1998,7 @@ var usersRouter = router({
     })).optional()
   })).mutation(async ({ input: { id, password, permissions, ...data } }) => {
     const updateData = { ...data };
-    if (password) updateData.passwordHash = hashPassword(password);
+    if (password) updateData.passwordHash = await hashPassword(password);
     await updateUser(id, updateData);
     if (permissions) await setUserPermissions(id, permissions);
     return { success: true };
@@ -2420,7 +2420,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { defineConfig } from "vite";
 import { vitePluginManusRuntime } from "vite-plugin-manus-runtime";
-var PROJECT_ROOT = import.meta.dirname;
+var PROJECT_ROOT = typeof __dirname !== "undefined" ? __dirname : import.meta.dirname ?? process.cwd();
 var LOG_DIR = path.join(PROJECT_ROOT, ".manus-logs");
 var MAX_LOG_SIZE_BYTES = 1 * 1024 * 1024;
 var TRIM_TARGET_BYTES = Math.floor(MAX_LOG_SIZE_BYTES * 0.6);
@@ -2532,17 +2532,24 @@ var vite_config_default = defineConfig({
   plugins,
   resolve: {
     alias: {
-      "@": path.resolve(import.meta.dirname, "client", "src"),
-      "@shared": path.resolve(import.meta.dirname, "shared"),
-      "@assets": path.resolve(import.meta.dirname, "attached_assets")
+      "@": path.resolve(PROJECT_ROOT, "client", "src"),
+      "@shared": path.resolve(PROJECT_ROOT, "shared"),
+      "@assets": path.resolve(PROJECT_ROOT, "attached_assets")
     }
   },
-  envDir: path.resolve(import.meta.dirname),
-  root: path.resolve(import.meta.dirname, "client"),
-  publicDir: path.resolve(import.meta.dirname, "client", "public"),
+  envDir: path.resolve(PROJECT_ROOT),
+  root: path.resolve(PROJECT_ROOT, "client"),
+  publicDir: path.resolve(PROJECT_ROOT, "client", "public"),
   build: {
-    outDir: path.resolve(import.meta.dirname, "dist/public"),
-    emptyOutDir: true
+    outDir: path.resolve(PROJECT_ROOT, "dist/public"),
+    emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        inlineDynamicImports: true,
+        entryFileNames: "assets/index.js",
+        assetFileNames: "assets/index.[ext]"
+      }
+    }
   },
   server: {
     host: true,
@@ -2563,6 +2570,7 @@ var vite_config_default = defineConfig({
 });
 
 // server/_core/vite.ts
+var _dirname = typeof __dirname !== "undefined" ? __dirname : typeof import.meta.dirname === "string" ? import.meta.dirname : process.cwd();
 async function setupVite(app, server) {
   const serverOptions = {
     middlewareMode: true,
@@ -2580,7 +2588,7 @@ async function setupVite(app, server) {
     const url = req.originalUrl;
     try {
       const clientTemplate = path2.resolve(
-        import.meta.dirname,
+        _dirname,
         "../..",
         "client",
         "index.html"
@@ -2599,7 +2607,7 @@ async function setupVite(app, server) {
   });
 }
 function serveStatic(app) {
-  const distPath = process.env.NODE_ENV === "development" ? path2.resolve(import.meta.dirname, "../..", "dist", "public") : path2.resolve(import.meta.dirname, "public");
+  const distPath = process.env.NODE_ENV === "development" ? path2.resolve(_dirname, "../..", "dist", "public") : path2.resolve(_dirname, "public");
   if (!fs2.existsSync(distPath)) {
     console.error(
       `Could not find the build directory: ${distPath}, make sure to build the client first`

@@ -1,0 +1,9 @@
+{
+  "query": "CREATE TABLE IF NOT EXISTS `barcode_serials` (\n\t`id` int AUTO_INCREMENT NOT NULL,\n\t`variantBarcode` varchar(128) NOT NULL,\n\t`lastSerial` int NOT NULL DEFAULT 0,\n\t`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,\n\tCONSTRAINT `barcode_serials_id` PRIMARY KEY(`id`),\n\tCONSTRAINT `barcode_serials_variantBarcode_unique` UNIQUE(`variantBarcode`)\n);",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway06.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3hVUzgoV1qgXfsm.53fe60abead7 --database GuiQ96KiLevK2WuhVmj7UT --execute CREATE TABLE IF NOT EXISTS `barcode_serials` (\n\t`id` int AUTO_INCREMENT NOT NULL,\n\t`variantBarcode` varchar(128) NOT NULL,\n\t`lastSerial` int NOT NULL DEFAULT 0,\n\t`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,\n\tCONSTRAINT `barcode_serials_id` PRIMARY KEY(`id`),\n\tCONSTRAINT `barcode_serials_variantBarcode_unique` UNIQUE(`variantBarcode`)\n);",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 2008
+}

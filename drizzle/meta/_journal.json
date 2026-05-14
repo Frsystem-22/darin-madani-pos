@@ -22,6 +22,13 @@
       "when": 1778597678853,
       "tag": "0002_cold_liz_osborn",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1778765085570,
+      "tag": "0003_kind_rogue",
+      "breakpoints": true
     }
   ]
 }

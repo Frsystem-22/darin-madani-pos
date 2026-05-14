@@ -19,6 +19,7 @@ export default {
     users: "Users", settings: "Settings", reports: "Reports",
     warehouses: "Warehouses", categories: "Categories", discounts: "Discounts",
     stockMovements: "Stock Movements",
+    barcode_print: "Print Labels",
   },
   auth: {
     login: "Login", logout: "Logout",

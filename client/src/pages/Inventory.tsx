@@ -15,7 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Plus, Search, Edit, Trash2, Package, Barcode, Upload,
-  ArrowUpDown, TrendingDown, Warehouse, RefreshCw, Eye, X, ImagePlus
+  ArrowUpDown, TrendingDown, Warehouse, RefreshCw, Eye, X, ImagePlus, Layers
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import BarcodeLabel from "@/components/BarcodeLabel";
@@ -31,10 +31,17 @@ export default function Inventory() {
   const [editProduct, setEditProduct] = useState<any>(null);
   const [showBarcodeDialog, setShowBarcodeDialog] = useState(false);
   const [barcodeProduct, setBarcodeProduct] = useState<any>(null);
+  const [showVariantsDialog, setShowVariantsDialog] = useState(false);
+  const [variantsProductId, setVariantsProductId] = useState<number | null>(null);
   const [showStockDialog, setShowStockDialog] = useState(false);
   const [stockProduct, setStockProduct] = useState<any>(null);
   const [stockAction, setStockAction] = useState<"purchase" | "adjust" | "transfer">("purchase");
   const [uploadingImage, setUploadingImage] = useState(false);
+
+  const { data: variantsData, isLoading: variantsLoading } = trpc.products.getVariants.useQuery(
+    { productId: variantsProductId! },
+    { enabled: !!variantsProductId }
+  );
 
   const { data: products, refetch } = trpc.products.list.useQuery({ search: search || undefined, categoryId: categoryFilter !== "all" ? parseInt(categoryFilter) : undefined });
   const { data: categories } = trpc.settings.getCategories.useQuery();
@@ -82,14 +89,54 @@ export default function Inventory() {
     }
   };
 
+  // Compress image to max 2MB using Canvas
+  const compressImage = (file: File, maxSizeMB = 2): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const canvas = document.createElement('canvas');
+        let { width, height } = img;
+        // Scale down if needed (max 1920px)
+        const MAX_DIM = 1920;
+        if (width > MAX_DIM || height > MAX_DIM) {
+          const ratio = Math.min(MAX_DIM / width, MAX_DIM / height);
+          width = Math.round(width * ratio);
+          height = Math.round(height * ratio);
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d')!;
+        ctx.drawImage(img, 0, 0, width, height);
+        // Try quality 0.85 first, reduce if still too large
+        const tryCompress = (quality: number) => {
+          canvas.toBlob(blob => {
+            if (!blob) { reject(new Error('Compression failed')); return; }
+            if (blob.size > maxSizeMB * 1024 * 1024 && quality > 0.3) {
+              tryCompress(quality - 0.1);
+            } else {
+              resolve(blob);
+            }
+          }, 'image/jpeg', quality);
+        };
+        tryCompress(0.85);
+      };
+      img.onerror = reject;
+      img.src = url;
+    });
+  };
+
   const handleImageUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     setUploadingImage(true);
     try {
       const newUrls: string[] = [];
       for (const file of Array.from(files)) {
+        // Compress before upload
+        const compressed = await compressImage(file, 2);
         const fd = new FormData();
-        fd.append("file", file);
+        fd.append("file", new File([compressed], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' }));
         const res = await fetch("/api/upload", { method: "POST", body: fd });
         if (!res.ok) throw new Error("Upload failed");
         const { url } = await res.json();
@@ -164,7 +211,7 @@ export default function Inventory() {
             </TableHeader>
             <TableBody>
               {(products || []).map((p: any) => {
-                const isLow = p.totalQty <= (p.lowStockAlert || 5);
+                const isLow = (p.totalStock ?? p.totalQty ?? 0) <= (p.lowStockAlert || 5);
                 return (
                   <TableRow key={p.id}>
                     <TableCell>
@@ -195,12 +242,15 @@ export default function Inventory() {
                     <TableCell className="text-xs font-mono text-muted-foreground">{p.barcode}</TableCell>
                     <TableCell className="font-medium text-primary">{Number(p.salePrice).toLocaleString()} {currency}</TableCell>
                     <TableCell>
-                      <Badge variant={p.totalQty === 0 ? "destructive" : isLow ? "secondary" : "outline"}>
-                        {p.totalQty}
+                      <Badge variant={(p.totalStock ?? p.totalQty ?? 0) === 0 ? "destructive" : isLow ? "secondary" : "outline"}>
+                        {p.totalStock ?? p.totalQty ?? 0}
                       </Badge>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-blue-600 hover:text-blue-700" title={isAr ? "عرض التنويعات" : "View Variants"} onClick={() => { setVariantsProductId(p.id); setShowVariantsDialog(true); }}>
+                          <Layers size={13} />
+                        </Button>
                         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(p)}>
                           <Edit size={13} />
                         </Button>
@@ -453,6 +503,85 @@ export default function Inventory() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowStockDialog(false)}>{t("common.cancel")}</Button>
             <Button onClick={handleStockAction}>{t("common.save")}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Variants Dialog */}
+      <Dialog open={showVariantsDialog} onOpenChange={open => { setShowVariantsDialog(open); if (!open) setVariantsProductId(null); }}>
+        <DialogContent className="max-w-3xl" dir={isAr ? "rtl" : "ltr"}>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Layers size={18} className="text-blue-600" />
+              {isAr ? "تنويعات المنتج" : "Product Variants"}
+              {variantsData?.[0]?.name && (
+                <span className="text-muted-foreground font-normal text-sm">— {variantsData[0].name}</span>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+          {variantsLoading ? (
+            <div className="py-12 text-center text-muted-foreground">{isAr ? "جاري التحميل..." : "Loading..."}</div>
+          ) : !variantsData?.length ? (
+            <div className="py-12 text-center text-muted-foreground">{isAr ? "لا توجد تنويعات" : "No variants found"}</div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center gap-3 flex-wrap">
+                <Badge variant="outline" className="gap-1">
+                  <Layers size={11} />
+                  {variantsData.length} {isAr ? "تنويعة" : "variants"}
+                </Badge>
+                <Badge variant="outline" className="gap-1 text-green-700 border-green-300">
+                  <Package size={11} />
+                  {isAr ? "إجمالي المخزون:" : "Total stock:"} {(variantsData as any[]).reduce((a, v) => a + v.totalQty, 0)}
+                </Badge>
+              </div>
+              <ScrollArea className="max-h-[60vh]">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>{isAr ? "اللون" : "Color"}</TableHead>
+                      <TableHead>{isAr ? "المقاس" : "Size"}</TableHead>
+                      <TableHead>{isAr ? "الباركود" : "Barcode"}</TableHead>
+                      <TableHead>{isAr ? "السعر" : "Price"}</TableHead>
+                      {((variantsData as any[])[0]?.warehouses || []).map((wh: any) => (
+                        <TableHead key={wh.id} className="text-center">{isAr ? wh.name : (wh.nameEn || wh.name)}</TableHead>
+                      ))}
+                      <TableHead className="text-center font-bold">{isAr ? "الإجمالي" : "Total"}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(variantsData as any[]).map((v) => (
+                      <TableRow key={v.id} className={v.id === variantsProductId ? "bg-blue-50 dark:bg-blue-950/20" : ""}>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            {v.colorHex && <span className="w-4 h-4 rounded-full border border-border shrink-0" style={{ backgroundColor: v.colorHex }} />}
+                            <span className="text-sm">{isAr ? v.color : (v.colorEn || v.color) || "-"}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell><span className="text-sm font-mono">{v.size || "-"}</span></TableCell>
+                        <TableCell><span className="text-xs font-mono text-muted-foreground">{v.barcode || v.sku || "-"}</span></TableCell>
+                        <TableCell><span className="text-sm font-semibold text-amber-700">{Number(v.salePrice).toLocaleString()} {currency}</span></TableCell>
+                        {(v.warehouses || []).map((wh: any) => {
+                          const stockEntry = (v.stock || []).find((s: any) => s.warehouseId === wh.id);
+                          const qty = stockEntry?.qty ?? 0;
+                          return (
+                            <TableCell key={wh.id} className="text-center">
+                              <Badge variant={qty === 0 ? "destructive" : qty <= (v.lowStockAlert || 5) ? "secondary" : "outline"} className="font-mono">{qty}</Badge>
+                            </TableCell>
+                          );
+                        })}
+                        <TableCell className="text-center">
+                          <Badge variant={v.totalQty === 0 ? "destructive" : "default"} className="font-bold">{v.totalQty}</Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowVariantsDialog(false)}>{isAr ? "إغلاق" : "Close"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

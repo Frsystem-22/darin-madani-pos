@@ -3,7 +3,8 @@
 .pnpm-store/
 
 # Build outputs
-dist/
+# Note: dist/ is tracked for deployment to IISNode on Plesk Windows server
+# dist/
 build/
 *.dist
 
