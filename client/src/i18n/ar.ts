@@ -79,6 +79,8 @@ export default {
   },
   customers: {
     title: "إدارة العملاء", addCustomer: "إضافة عميل",
+    name: "اسم العميل", phone: "الهاتف", email: "البريد الإلكتروني",
+    add: "إضافة عميل", edit: "تعديل عميل",
     city: "المدينة", points: "النقاط", totalSpent: "إجمالي الإنفاق",
     purchaseHistory: "سجل المشتريات", contactCustomer: "التواصل مع العميل",
   },

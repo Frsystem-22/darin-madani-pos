@@ -294,6 +294,27 @@ export const paymentRequests = mysqlTable("payment_requests", {
   updatedAt:       timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
+// ─── PRODUCT COLORS ───────────────────────────────────────────────────────────
+export const productColors = mysqlTable("product_colors", {
+  id:        int("id").autoincrement().primaryKey(),
+  name:      varchar("name", { length: 64 }).notNull(),
+  nameEn:    varchar("nameEn", { length: 64 }),
+  hex:       varchar("hex", { length: 16 }).default("#000000"),
+  sortOrder: int("sortOrder").default(0),
+  isActive:  boolean("isActive").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+// ─── PRODUCT SIZES ─────────────────────────────────────────────────────────────
+export const productSizes = mysqlTable("product_sizes", {
+  id:        int("id").autoincrement().primaryKey(),
+  name:      varchar("name", { length: 32 }).notNull(),
+  nameEn:    varchar("nameEn", { length: 32 }),
+  sortOrder: int("sortOrder").default(0),
+  isActive:  boolean("isActive").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
 // ─── TYPES ─────────────────────────────────────────────────────────────────
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;

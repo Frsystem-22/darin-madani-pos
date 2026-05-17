@@ -67,7 +67,7 @@ export default function BarcodePrint() {
   const isAr = i18n.language === "ar";
   const currency = isAr ? "ر.س" : "SAR";
   const [search, setSearch] = useState("");
-  const [labelSize, setLabelSize] = useState<"58mm" | "80mm">("58mm");
+  const [labelSize, setLabelSize] = useState<"58mm" | "80mm" | "60x40mm">("60x40mm");
   const [selected, setSelected] = useState<Record<number, SelectedProduct>>({});
   const [isPrinting, setIsPrinting] = useState(false);
 
@@ -75,6 +75,21 @@ export default function BarcodePrint() {
   const reserveSerials = trpc.products.reserveSerials.useMutation();
 
   const products: any[] = (productsData as any) || [];
+
+  // تحديد كل المنتجات تلقائياً بكمياتها من المخزون عند التحميل
+  useEffect(() => {
+    if (products.length > 0 && Object.keys(selected).length === 0) {
+      const next: Record<number, SelectedProduct> = {};
+      products.forEach(p => {
+        const stockQty = p.totalQty || p.stock?.reduce((s: number, st: any) => s + (st.qty || 0), 0) || 0;
+        if (stockQty > 0) {
+          next[p.id] = { product: p, qty: stockQty };
+        }
+      });
+      if (Object.keys(next).length > 0) setSelected(next);
+    }
+  }, [products.length]);
+
   const filtered = products.filter(p => {
     const q = search.toLowerCase();
     return (
@@ -101,7 +116,10 @@ export default function BarcodePrint() {
 
   const selectAll = () => {
     const next: Record<number, SelectedProduct> = {};
-    filtered.forEach(p => { next[p.id] = selected[p.id] || { product: p, qty: 1 }; });
+    filtered.forEach(p => {
+      const stockQty = p.totalQty || p.stock?.reduce((s: number, st: any) => s + (st.qty || 0), 0) || 1;
+      next[p.id] = selected[p.id] || { product: p, qty: stockQty };
+    });
     setSelected(next);
   };
 
@@ -121,7 +139,8 @@ export default function BarcodePrint() {
       const printWindow = window.open("", "_blank");
       if (!printWindow) { toast.error(isAr ? "تعذّر فتح نافذة الطباعة" : "Could not open print window"); return; }
 
-      const labelWidth = labelSize === "58mm" ? "54mm" : "76mm";
+      const labelWidth = labelSize === "58mm" ? "54mm" : labelSize === "60x40mm" ? "58mm" : "76mm";
+      const labelHeight = labelSize === "60x40mm" ? "38mm" : undefined;
       let labelsHtml = "";
       let initScript = "";
       let idx = 0;
@@ -158,14 +177,14 @@ export default function BarcodePrint() {
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: Arial, sans-serif; background: white; }
     .labels-container { display: flex; flex-wrap: wrap; gap: 2mm; padding: 2mm; }
-    .label { width: ${labelWidth}; border: 0.5px solid #ccc; padding: 2mm 2mm 1mm; display: flex; flex-direction: column; align-items: center; page-break-inside: avoid; }
-    .store-name { font-size: 6.5pt; font-weight: bold; letter-spacing: 1.5px; color: #8B7355; margin-bottom: 0.5mm; }
-    .product-name { font-size: 8pt; font-weight: bold; text-align: center; margin-bottom: 0.5mm; line-height: 1.2; }
-    .detail { font-size: 6.5pt; color: #555; margin-bottom: 0.5mm; }
-    .price { font-size: 10pt; font-weight: bold; color: #8B7355; margin-bottom: 1mm; }
-    .barcode-svg { width: 100%; max-height: 10mm; }
+    .label { width: ${labelWidth}; ${labelHeight ? `height: ${labelHeight}; overflow: hidden;` : ''} border: 0.5px solid #ccc; padding: 2mm 2mm 1mm; display: flex; flex-direction: column; align-items: center; justify-content: center; page-break-inside: avoid; }
+    .store-name { font-size: ${labelHeight ? '7pt' : '6.5pt'}; font-weight: bold; letter-spacing: 1.5px; color: #8B7355; margin-bottom: 0.5mm; }
+    .product-name { font-size: ${labelHeight ? '9pt' : '8pt'}; font-weight: bold; text-align: center; margin-bottom: 0.5mm; line-height: 1.2; }
+    .detail { font-size: ${labelHeight ? '7pt' : '6.5pt'}; color: #555; margin-bottom: 0.5mm; }
+    .price { font-size: ${labelHeight ? '11pt' : '10pt'}; font-weight: bold; color: #8B7355; margin-bottom: 1mm; }
+    .barcode-svg { width: 100%; max-height: ${labelHeight ? '12mm' : '10mm'}; }
     .barcode-num { font-size: 5.5pt; color: #666; margin-top: 0.5mm; font-family: monospace; letter-spacing: 0.5px; }
-    @media print { body { margin: 0; } .labels-container { gap: 1mm; padding: 1mm; } }
+    @media print { body { margin: 0; } .labels-container { gap: 1mm; padding: 1mm; } @page { size: ${labelHeight ? '60mm 40mm' : 'auto'}; margin: 0; } }
   </style>
 </head>
 <body>
@@ -202,6 +221,7 @@ export default function BarcodePrint() {
           <Select value={labelSize} onValueChange={(v: any) => setLabelSize(v)}>
             <SelectTrigger className="w-24 h-8"><SelectValue /></SelectTrigger>
             <SelectContent>
+              <SelectItem value="60x40mm">60×40mm</SelectItem>
               <SelectItem value="58mm">58mm</SelectItem>
               <SelectItem value="80mm">80mm</SelectItem>
             </SelectContent>
@@ -247,7 +267,10 @@ export default function BarcodePrint() {
                       <p className="text-xs text-muted-foreground">{[isAr ? p.color : p.colorEn, p.size].filter(Boolean).join(" · ")}</p>
                     )}
                   </div>
-                  <div className="text-sm font-semibold text-amber-700 shrink-0">{Number(p.salePrice).toLocaleString()} {currency}</div>
+                  <div className="flex flex-col items-end shrink-0 gap-0.5">
+                    <span className="text-sm font-semibold text-amber-700">{Number(p.salePrice).toLocaleString()} {currency}</span>
+                    <span className="text-xs text-muted-foreground">{isAr ? "مخزون:" : "Stock:"} {p.totalQty || p.stock?.reduce((s: number, st: any) => s + (st.qty || 0), 0) || 0}</span>
+                  </div>
                   {isChecked && (
                     <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
                       <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => setQty(p.id, (selected[p.id]?.qty || 1) - 1)}><Minus size={12} /></Button>

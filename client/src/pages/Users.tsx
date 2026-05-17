@@ -217,6 +217,16 @@ export default function Users() {
                   <Label>{t("users.name")} *</Label>
                   <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
                 </div>
+                {!editUser && (
+                  <div className="space-y-1">
+                    <Label>{isAr ? "اسم المستخدم" : "Username"} *</Label>
+                    <Input value={form.username} onChange={e => setForm(f => ({ ...f, username: e.target.value }))} dir="ltr" />
+                  </div>
+                )}
+                <div className="space-y-1">
+                  <Label>{isAr ? "كلمة المرور" : "Password"}{editUser ? (isAr ? " (اتركها فارغة للإبقاء على القديمة)" : " (leave blank to keep current)") : " *"}</Label>
+                  <Input value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} type="password" dir="ltr" />
+                </div>
                 <div className="space-y-1">
                   <Label>{t("customers.email")}</Label>
                   <Input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} type="email" dir="ltr" />

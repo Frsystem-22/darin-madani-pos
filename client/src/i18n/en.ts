@@ -79,6 +79,8 @@ export default {
   },
   customers: {
     title: "Customer Management", addCustomer: "Add Customer",
+    name: "Customer Name", phone: "Phone", email: "Email",
+    add: "Add Customer", edit: "Edit Customer",
     city: "City", points: "Points", totalSpent: "Total Spent",
     purchaseHistory: "Purchase History", contactCustomer: "Contact Customer",
   },

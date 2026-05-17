@@ -35,6 +35,7 @@ var init_env = __esm({
 // drizzle/schema.ts
 var schema_exports = {};
 __export(schema_exports, {
+  barcodeSerials: () => barcodeSerials,
   categories: () => categories,
   customers: () => customers,
   discounts: () => discounts,
@@ -42,6 +43,8 @@ __export(schema_exports, {
   invoicePayments: () => invoicePayments,
   invoices: () => invoices,
   paymentRequests: () => paymentRequests,
+  productColors: () => productColors,
+  productSizes: () => productSizes,
   productStock: () => productStock,
   products: () => products,
   returnItems: () => returnItems,
@@ -63,7 +66,7 @@ import {
   boolean,
   json
 } from "drizzle-orm/mysql-core";
-var users, userPermissions, settings, warehouses, categories, products, productStock, stockMovements, customers, discounts, invoices, invoiceItems, returns, returnItems, invoicePayments, paymentRequests;
+var users, userPermissions, settings, warehouses, categories, products, productStock, stockMovements, barcodeSerials, customers, discounts, invoices, invoiceItems, returns, returnItems, invoicePayments, paymentRequests, productColors, productSizes;
 var init_schema = __esm({
   "drizzle/schema.ts"() {
     "use strict";
@@ -182,6 +185,12 @@ var init_schema = __esm({
       notes: text("notes"),
       userId: int("userId"),
       createdAt: timestamp("createdAt").defaultNow().notNull()
+    });
+    barcodeSerials = mysqlTable("barcode_serials", {
+      id: int("id").autoincrement().primaryKey(),
+      variantBarcode: varchar("variantBarcode", { length: 128 }).notNull().unique(),
+      lastSerial: int("lastSerial").default(0).notNull(),
+      updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull()
     });
     customers = mysqlTable("customers", {
       id: int("id").autoincrement().primaryKey(),
@@ -322,6 +331,23 @@ var init_schema = __esm({
       createdAt: timestamp("createdAt").defaultNow().notNull(),
       updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull()
     });
+    productColors = mysqlTable("product_colors", {
+      id: int("id").autoincrement().primaryKey(),
+      name: varchar("name", { length: 64 }).notNull(),
+      nameEn: varchar("nameEn", { length: 64 }),
+      hex: varchar("hex", { length: 16 }).default("#000000"),
+      sortOrder: int("sortOrder").default(0),
+      isActive: boolean("isActive").default(true).notNull(),
+      createdAt: timestamp("createdAt").defaultNow().notNull()
+    });
+    productSizes = mysqlTable("product_sizes", {
+      id: int("id").autoincrement().primaryKey(),
+      name: varchar("name", { length: 32 }).notNull(),
+      nameEn: varchar("nameEn", { length: 32 }),
+      sortOrder: int("sortOrder").default(0),
+      isActive: boolean("isActive").default(true).notNull(),
+      createdAt: timestamp("createdAt").defaultNow().notNull()
+    });
   }
 });
 
@@ -330,23 +356,28 @@ var db_exports = {};
 __export(db_exports, {
   addStockMovement: () => addStockMovement,
   createCategory: () => createCategory,
+  createColor: () => createColor,
   createCustomer: () => createCustomer,
   createDiscount: () => createDiscount,
   createInvoice: () => createInvoice,
   createInvoiceFromPaymentRequest: () => createInvoiceFromPaymentRequest,
   createProduct: () => createProduct,
   createReturn: () => createReturn,
+  createSize: () => createSize,
   createWarehouse: () => createWarehouse,
   deleteCategory: () => deleteCategory,
+  deleteColor: () => deleteColor,
   deleteCustomer: () => deleteCustomer,
   deleteDiscount: () => deleteDiscount,
   deleteProduct: () => deleteProduct,
+  deleteSize: () => deleteSize,
   deleteUser: () => deleteUser,
   deleteWarehouse: () => deleteWarehouse,
   generateInvoiceNumber: () => generateInvoiceNumber,
   generateReturnNumber: () => generateReturnNumber,
   getAllUsers: () => getAllUsers,
   getCategories: () => getCategories,
+  getColors: () => getColors,
   getCustomerById: () => getCustomerById,
   getCustomers: () => getCustomers,
   getDashboardStats: () => getDashboardStats,
@@ -355,15 +386,18 @@ __export(db_exports, {
   getInvoiceById: () => getInvoiceById,
   getInvoiceByToken: () => getInvoiceByToken,
   getInvoices: () => getInvoices,
+  getLastBarcodeSerial: () => getLastBarcodeSerial,
   getLowStockProducts: () => getLowStockProducts,
   getMonthlySales: () => getMonthlySales,
   getProductByBarcode: () => getProductByBarcode,
   getProductById: () => getProductById,
   getProductStock: () => getProductStock,
+  getProductVariants: () => getProductVariants,
   getProducts: () => getProducts,
   getReturnById: () => getReturnById,
   getReturns: () => getReturns,
   getSettings: () => getSettings,
+  getSizes: () => getSizes,
   getStockMovements: () => getStockMovements,
   getTopProducts: () => getTopProducts,
   getUserById: () => getUserById,
@@ -372,14 +406,17 @@ __export(db_exports, {
   getUserPermissions: () => getUserPermissions,
   getWarehouseById: () => getWarehouseById,
   getWarehouses: () => getWarehouses,
+  reserveBarcodeSerials: () => reserveBarcodeSerials,
   setProductStock: () => setProductStock,
   setUserPermissions: () => setUserPermissions,
   updateCategory: () => updateCategory,
+  updateColor: () => updateColor,
   updateCustomer: () => updateCustomer,
   updateDiscount: () => updateDiscount,
   updateInvoice: () => updateInvoice,
   updateProduct: () => updateProduct,
   updateSettings: () => updateSettings,
+  updateSize: () => updateSize,
   updateUser: () => updateUser,
   updateWarehouse: () => updateWarehouse,
   upsertProductStock: () => upsertProductStock,
@@ -619,6 +656,39 @@ async function getStockMovements(productId, warehouseId) {
   if (productId) conds.push(eq(stockMovements.productId, productId));
   if (warehouseId) conds.push(eq(stockMovements.warehouseId, warehouseId));
   return db.select().from(stockMovements).where(conds.length ? and(...conds) : void 0).orderBy(desc(stockMovements.createdAt)).limit(100);
+}
+async function reserveBarcodeSerials(variantBarcode, qty) {
+  const db = await getDb();
+  if (!db) return [];
+  await db.insert(barcodeSerials).values({ variantBarcode, lastSerial: qty }).onDuplicateKeyUpdate({ set: { lastSerial: sql`lastSerial + ${qty}` } });
+  const row = await db.select().from(barcodeSerials).where(eq(barcodeSerials.variantBarcode, variantBarcode)).limit(1);
+  const lastSerial = row[0]?.lastSerial ?? qty;
+  const start = lastSerial - qty + 1;
+  return Array.from({ length: qty }, (_, i) => start + i);
+}
+async function getLastBarcodeSerial(variantBarcode) {
+  const db = await getDb();
+  if (!db) return 0;
+  const row = await db.select().from(barcodeSerials).where(eq(barcodeSerials.variantBarcode, variantBarcode)).limit(1);
+  return row[0]?.lastSerial ?? 0;
+}
+async function getProductVariants(productId) {
+  const db = await getDb();
+  if (!db) return [];
+  const base = await db.select().from(products).where(eq(products.id, productId)).limit(1);
+  if (!base[0]) return [];
+  const baseName = base[0].name;
+  const variants = await db.select().from(products).where(and(eq(products.name, baseName), eq(products.isActive, true))).orderBy(products.color, products.size);
+  const variantIds = variants.map((v) => v.id);
+  if (!variantIds.length) return [];
+  const stockRows = await db.select().from(productStock).where(sql`${productStock.productId} IN (${sql.join(variantIds.map((id) => sql`${id}`), sql`, `)})`);
+  const warehouseRows = await db.select().from(warehouses).where(eq(warehouses.isActive, true));
+  return variants.map((v) => ({
+    ...v,
+    stock: stockRows.filter((s) => s.productId === v.id),
+    totalQty: stockRows.filter((s) => s.productId === v.id).reduce((a, b) => a + b.qty, 0),
+    warehouses: warehouseRows
+  }));
 }
 async function getCustomers(search) {
   const db = await getDb();
@@ -894,6 +964,46 @@ async function createInvoiceFromPaymentRequest(pr, settings2) {
     });
   }
   return invoiceId;
+}
+async function getColors() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(productColors).where(eq(productColors.isActive, true)).orderBy(productColors.sortOrder, productColors.name);
+}
+async function createColor(data) {
+  const db = await getDb();
+  if (!db) return;
+  await db.insert(productColors).values(data);
+}
+async function updateColor(id, data) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(productColors).set(data).where(eq(productColors.id, id));
+}
+async function deleteColor(id) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(productColors).where(eq(productColors.id, id));
+}
+async function getSizes() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(productSizes).where(eq(productSizes.isActive, true)).orderBy(productSizes.sortOrder, productSizes.name);
+}
+async function createSize(data) {
+  const db = await getDb();
+  if (!db) return;
+  await db.insert(productSizes).values(data);
+}
+async function updateSize(id, data) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(productSizes).set(data).where(eq(productSizes.id, id));
+}
+async function deleteSize(id) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(productSizes).where(eq(productSizes.id, id));
 }
 var _db;
 var init_db = __esm({
@@ -1224,7 +1334,6 @@ var settingsRouter = router({
     myfatoorahToken: z3.string().optional(),
     myfatoorahEnv: z3.enum(["sandbox", "live"]).optional(),
     myfatoorahSupplier: z3.string().optional(),
-    // ثابت = 24 لـ Darin Madani
     priceIncludesTax: z3.boolean().optional()
   })).mutation(async ({ input }) => {
     await updateSettings(input);
@@ -1322,6 +1431,60 @@ var settingsRouter = router({
   deleteDiscount: adminOnly.input(z3.object({ id: z3.number() })).mutation(async ({ input }) => {
     await deleteDiscount(input.id);
     return { success: true };
+  }),
+  // Colors
+  getColors: protectedProcedure.query(async () => {
+    return await getColors();
+  }),
+  createColor: adminOnly.input(z3.object({
+    name: z3.string().min(1),
+    nameEn: z3.string().optional(),
+    hex: z3.string().optional(),
+    sortOrder: z3.number().optional()
+  })).mutation(async ({ input }) => {
+    await createColor(input);
+    return { success: true };
+  }),
+  updateColor: adminOnly.input(z3.object({
+    id: z3.number(),
+    name: z3.string().optional(),
+    nameEn: z3.string().optional(),
+    hex: z3.string().optional(),
+    sortOrder: z3.number().optional(),
+    isActive: z3.boolean().optional()
+  })).mutation(async ({ input: { id, ...data } }) => {
+    await updateColor(id, data);
+    return { success: true };
+  }),
+  deleteColor: adminOnly.input(z3.object({ id: z3.number() })).mutation(async ({ input }) => {
+    await deleteColor(input.id);
+    return { success: true };
+  }),
+  // Sizes
+  getSizes: protectedProcedure.query(async () => {
+    return await getSizes();
+  }),
+  createSize: adminOnly.input(z3.object({
+    name: z3.string().min(1),
+    nameEn: z3.string().optional(),
+    sortOrder: z3.number().optional()
+  })).mutation(async ({ input }) => {
+    await createSize(input);
+    return { success: true };
+  }),
+  updateSize: adminOnly.input(z3.object({
+    id: z3.number(),
+    name: z3.string().optional(),
+    nameEn: z3.string().optional(),
+    sortOrder: z3.number().optional(),
+    isActive: z3.boolean().optional()
+  })).mutation(async ({ input: { id, ...data } }) => {
+    await updateSize(id, data);
+    return { success: true };
+  }),
+  deleteSize: adminOnly.input(z3.object({ id: z3.number() })).mutation(async ({ input }) => {
+    await deleteSize(input.id);
+    return { success: true };
   })
 });
 
@@ -1329,7 +1492,7 @@ var settingsRouter = router({
 init_db();
 import { z as z4 } from "zod";
 import { TRPCError as TRPCError5 } from "@trpc/server";
-import { nanoid } from "nanoid";
+import { sql as sql2 } from "drizzle-orm";
 var adminOrManager = protectedProcedure.use(({ ctx, next }) => {
   if (!["admin", "manager", "warehouse"].includes(ctx.user.role))
     throw new TRPCError5({ code: "FORBIDDEN" });
@@ -1374,7 +1537,17 @@ var productsRouter = router({
   })).mutation(async ({ input, ctx }) => {
     const { initialStock, ...productData } = input;
     const barcode = `DM${Date.now()}${Math.floor(Math.random() * 100)}`;
-    const sku = productData.sku || `SKU-${nanoid(8).toUpperCase()}`;
+    let sku = productData.sku;
+    if (!sku) {
+      const db2 = await getDb();
+      let nextNum = 100001;
+      if (db2) {
+        const rows = await db2.execute(sql2`SELECT MAX(CAST(sku AS UNSIGNED)) as maxSku FROM products WHERE sku REGEXP '^[0-9]+$'`);
+        const maxVal = rows[0]?.[0]?.maxSku;
+        if (maxVal && Number(maxVal) >= 100001) nextNum = Number(maxVal) + 1;
+      }
+      sku = String(nextNum);
+    }
     const id = await createProduct({ ...productData, barcode, sku, images: productData.images || [] });
     if (!id) throw new TRPCError5({ code: "INTERNAL_SERVER_ERROR" });
     if (initialStock?.length) {
@@ -1400,6 +1573,7 @@ var productsRouter = router({
     size: z4.string().optional(),
     costPrice: z4.string().optional(),
     salePrice: z4.string().optional(),
+    sku: z4.string().optional(),
     images: z4.array(z4.string()).optional(),
     lowStockAlert: z4.number().optional(),
     isActive: z4.boolean().optional()
@@ -1488,6 +1662,37 @@ var productsRouter = router({
     warehouseId: z4.number().optional()
   })).query(async ({ input }) => {
     return await getStockMovements(input.productId, input.warehouseId);
+  }),
+  // ─── BARCODE SERIALS ─────────────────────────────────────────────────────────────
+  /**
+   * Reserve N sequential serial numbers for a variant barcode.
+   * Returns array of serial numbers to print on labels.
+   */
+  reserveSerials: adminOrManager.input(z4.object({
+    variantBarcode: z4.string().min(1),
+    qty: z4.number().min(1).max(500)
+  })).mutation(async ({ input }) => {
+    const serials = await reserveBarcodeSerials(input.variantBarcode, input.qty);
+    return { serials, variantBarcode: input.variantBarcode };
+  }),
+  /**
+   * Get the last allocated serial for a variant barcode (for preview).
+   */
+  getLastSerial: protectedProcedure.input(z4.object({
+    variantBarcode: z4.string().min(1)
+  })).query(async ({ input }) => {
+    const lastSerial = await getLastBarcodeSerial(input.variantBarcode);
+    return { lastSerial, variantBarcode: input.variantBarcode };
+  }),
+  // ─── PRODUCT VARIANTS ─────────────────────────────────────────────────────────────
+  /**
+   * Get all variants of a product (same name, different color/size)
+   * with stock per warehouse.
+   */
+  getVariants: protectedProcedure.input(z4.object({
+    productId: z4.number()
+  })).query(async ({ input }) => {
+    return await getProductVariants(input.productId);
   })
 });
 
@@ -1574,9 +1779,9 @@ var customersRouter = router({
 // server/routers/invoices.ts
 init_db();
 import { z as z6 } from "zod";
-import { sql as sql2 } from "drizzle-orm";
+import { sql as sql3 } from "drizzle-orm";
 import { TRPCError as TRPCError7 } from "@trpc/server";
-import { nanoid as nanoid2 } from "nanoid";
+import { nanoid } from "nanoid";
 import axios from "axios";
 async function sendWhatsApp(phone, message, settings2) {
   const instanceName = settings2?.whatsappInstance;
@@ -1700,7 +1905,7 @@ var invoicesRouter = router({
     origin: z6.string().optional()
   })).mutation(async ({ input, ctx }) => {
     const invoiceNumber = await generateInvoiceNumber();
-    const token = nanoid2(32);
+    const token = nanoid(32);
     const settings2 = await getSettings();
     const invoiceData = {
       invoiceNumber,
@@ -1734,7 +1939,7 @@ var invoicesRouter = router({
             const invoiceId = id;
             const method = split.method;
             const amount = split.amount;
-            await db.execute(sql2`INSERT INTO invoice_payments (invoiceId, method, amount, createdAt) VALUES (${invoiceId}, ${method}, ${amount}, NOW())`);
+            await db.execute(sql3`INSERT INTO invoice_payments (invoiceId, method, amount, createdAt) VALUES (${invoiceId}, ${method}, ${amount}, NOW())`);
           }
         }
       }
@@ -2409,7 +2614,7 @@ async function createContext(opts) {
 // server/_core/vite.ts
 import express from "express";
 import fs2 from "fs";
-import { nanoid as nanoid3 } from "nanoid";
+import { nanoid as nanoid2 } from "nanoid";
 import path2 from "path";
 import { createServer as createViteServer } from "vite";
 
@@ -2596,7 +2801,7 @@ async function setupVite(app, server) {
       let template = await fs2.promises.readFile(clientTemplate, "utf-8");
       template = template.replace(
         `src="/src/main.tsx"`,
-        `src="/src/main.tsx?v=${nanoid3()}"`
+        `src="/src/main.tsx?v=${nanoid2()}"`
       );
       const page = await vite.transformIndexHtml(url, template);
       res.status(200).set({ "Content-Type": "text/html" }).end(page);

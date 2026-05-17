@@ -4,7 +4,7 @@ import {
   InsertUser, categories, customers, discounts, invoiceItems,
   invoices, productStock, products, returnItems, returns,
   settings, stockMovements, userPermissions, users, warehouses,
-  barcodeSerials,
+  barcodeSerials, productColors, productSizes,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -592,4 +592,46 @@ export async function createInvoiceFromPaymentRequest(pr: any, settings: any): P
   }
 
   return invoiceId;
+}
+
+// ─── PRODUCT COLORS ────────────────────────────────────────────────────────
+export async function getColors() {
+  const db = await getDb(); if (!db) return [];
+  return db.select().from(productColors).where(eq(productColors.isActive, true)).orderBy(productColors.sortOrder, productColors.name);
+}
+
+export async function createColor(data: typeof productColors.$inferInsert) {
+  const db = await getDb(); if (!db) return;
+  await db.insert(productColors).values(data);
+}
+
+export async function updateColor(id: number, data: Partial<typeof productColors.$inferInsert>) {
+  const db = await getDb(); if (!db) return;
+  await db.update(productColors).set(data).where(eq(productColors.id, id));
+}
+
+export async function deleteColor(id: number) {
+  const db = await getDb(); if (!db) return;
+  await db.delete(productColors).where(eq(productColors.id, id));
+}
+
+// ─── PRODUCT SIZES ─────────────────────────────────────────────────────────
+export async function getSizes() {
+  const db = await getDb(); if (!db) return [];
+  return db.select().from(productSizes).where(eq(productSizes.isActive, true)).orderBy(productSizes.sortOrder, productSizes.name);
+}
+
+export async function createSize(data: typeof productSizes.$inferInsert) {
+  const db = await getDb(); if (!db) return;
+  await db.insert(productSizes).values(data);
+}
+
+export async function updateSize(id: number, data: Partial<typeof productSizes.$inferInsert>) {
+  const db = await getDb(); if (!db) return;
+  await db.update(productSizes).set(data).where(eq(productSizes.id, id));
+}
+
+export async function deleteSize(id: number) {
+  const db = await getDb(); if (!db) return;
+  await db.delete(productSizes).where(eq(productSizes.id, id));
 }

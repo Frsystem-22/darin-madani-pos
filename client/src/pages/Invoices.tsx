@@ -23,7 +23,13 @@ export default function Invoices() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
+  const [selectedInvoiceId, setSelectedInvoiceId] = useState<number | null>(null);
   const [showDetail, setShowDetail] = useState(false);
+
+  const { data: fullInvoice } = trpc.invoices.get.useQuery(
+    { id: selectedInvoiceId! },
+    { enabled: !!selectedInvoiceId }
+  );
 
   const { data: invoices, refetch } = trpc.invoices.list.useQuery(
     {
@@ -250,7 +256,7 @@ export default function Invoices() {
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1">
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setSelectedInvoice(inv); setShowDetail(true); }}>
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setSelectedInvoice(inv); setSelectedInvoiceId(inv.id); setShowDetail(true); }}>
                         <Eye size={13} />
                       </Button>
                       <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handlePrint(inv)}>
@@ -285,29 +291,31 @@ export default function Invoices() {
               {selectedInvoice?.invoiceNumber}
             </DialogTitle>
           </DialogHeader>
-          {selectedInvoice && (
+          {(fullInvoice || selectedInvoice) && (
             <div className="space-y-4">
               {/* Invoice meta */}
+              {(() => { const inv = fullInvoice || selectedInvoice; return (
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div>
-                  <p className="text-muted-foreground">{t("customers.name")}</p>
-                  <p className="font-medium">{selectedInvoice.customerName || (isAr ? "عميل عابر" : "Walk-in")}</p>
+                  <p className="text-muted-foreground">{isAr ? "اسم العميل" : "Customer"}</p>
+                  <p className="font-medium">{inv.customerName || (isAr ? "عميل عابر" : "Walk-in")}</p>
                 </div>
-                {selectedInvoice.customerPhone && (
+                {inv.customerPhone && (
                   <div>
                     <p className="text-muted-foreground">{t("customers.phone")}</p>
-                    <p className="font-medium">{selectedInvoice.customerPhone}</p>
+                    <p className="font-medium">{inv.customerPhone}</p>
                   </div>
                 )}
                 <div>
                   <p className="text-muted-foreground">{t("common.date")}</p>
-                  <p className="font-medium">{format(new Date(selectedInvoice.createdAt), "dd/MM/yyyy HH:mm", { locale })}</p>
+                  <p className="font-medium">{format(new Date(inv.createdAt), "dd/MM/yyyy HH:mm", { locale })}</p>
                 </div>
                 <div>
                   <p className="text-muted-foreground">{t("pos.paymentMethod")}</p>
-                  <p className="font-medium">{paymentLabel(selectedInvoice.paymentMethod)}</p>
+                  <p className="font-medium">{paymentLabel(inv.paymentMethod)}</p>
                 </div>
               </div>
+              ); })()}
 
               <Separator />
 
@@ -323,7 +331,7 @@ export default function Invoices() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {(selectedInvoice.items || []).map((item: any, i: number) => (
+                  {((fullInvoice?.items || selectedInvoice?.items) || []).map((item: any, i: number) => (
                     <TableRow key={i}>
                       <TableCell className="text-sm font-medium">{isAr ? item.productName : (item.productNameEn || item.productName)}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">{item.color}{item.size && ` · ${item.size}`}</TableCell>
@@ -341,23 +349,23 @@ export default function Invoices() {
               <div className="space-y-1.5 text-sm">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">{t("common.subtotal")}</span>
-                  <span>{Number(selectedInvoice.subtotal).toLocaleString()} {currency}</span>
+                  <span>{Number((fullInvoice || selectedInvoice).subtotal).toLocaleString()} {currency}</span>
                 </div>
-                {Number(selectedInvoice.discountAmount) > 0 && (
+                {Number((fullInvoice || selectedInvoice).discountAmount) > 0 && (
                   <div className="flex justify-between text-green-600">
                     <span>{t("common.discount")}</span>
-                    <span>- {Number(selectedInvoice.discountAmount).toLocaleString()} {currency}</span>
+                    <span>- {Number((fullInvoice || selectedInvoice).discountAmount).toLocaleString()} {currency}</span>
                   </div>
                 )}
-                {Number(selectedInvoice.taxAmount) > 0 && (
+                {Number((fullInvoice || selectedInvoice).taxAmount) > 0 && (
                   <div className="flex justify-between text-muted-foreground">
-                    <span>{t("common.tax")} ({selectedInvoice.taxRate}%)</span>
-                    <span>{Number(selectedInvoice.taxAmount).toLocaleString()} {currency}</span>
+                    <span>{t("common.tax")} ({(fullInvoice || selectedInvoice).taxRate}%)</span>
+                    <span>{Number((fullInvoice || selectedInvoice).taxAmount).toLocaleString()} {currency}</span>
                   </div>
                 )}
                 <div className="flex justify-between font-bold text-base border-t border-border pt-1.5">
                   <span>{t("common.total")}</span>
-                  <span className="text-primary">{Number(selectedInvoice.total).toLocaleString()} {currency}</span>
+                  <span className="text-primary">{Number((fullInvoice || selectedInvoice).total).toLocaleString()} {currency}</span>
                 </div>
               </div>
             </div>

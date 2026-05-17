@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Trash2, Edit, Save, Store, MessageCircle, CreditCard, Package, Tag } from "lucide-react";
+import { Plus, Trash2, Edit, Save, Store, MessageCircle, CreditCard, Package, Tag, Palette, Ruler } from "lucide-react";
 import WhatsAppSetup from "@/components/WhatsAppSetup";
 
 export default function Settings() {
@@ -23,6 +23,8 @@ export default function Settings() {
   const { data: warehouses, refetch: refetchWarehouses } = trpc.settings.getWarehouses.useQuery();
   const { data: categories, refetch: refetchCategories } = trpc.settings.getCategories.useQuery();
   const { data: discounts, refetch: refetchDiscounts } = trpc.settings.getDiscounts.useQuery();
+  const { data: colors, refetch: refetchColors } = trpc.settings.getColors.useQuery();
+  const { data: sizes, refetch: refetchSizes } = trpc.settings.getSizes.useQuery();
 
   const updateSettings = trpc.settings.update.useMutation({ onSuccess: () => { refetchSettings(); toast.success(isAr ? "تم حفظ الإعدادات" : "Settings saved"); } });
   const createWarehouse = trpc.settings.createWarehouse.useMutation({ onSuccess: () => { refetchWarehouses(); setShowWarehouseDialog(false); } });
@@ -33,6 +35,12 @@ export default function Settings() {
   const createDiscount = trpc.settings.createDiscount.useMutation({ onSuccess: () => { refetchDiscounts(); setShowDiscountDialog(false); } });
   const updateDiscount = trpc.settings.updateDiscount.useMutation({ onSuccess: () => { refetchDiscounts(); setShowDiscountDialog(false); } });
   const deleteDiscount = trpc.settings.deleteDiscount.useMutation({ onSuccess: () => refetchDiscounts() });
+  const createColor = trpc.settings.createColor.useMutation({ onSuccess: () => { refetchColors(); setShowColorDialog(false); } });
+  const updateColor = trpc.settings.updateColor.useMutation({ onSuccess: () => { refetchColors(); setShowColorDialog(false); } });
+  const deleteColor = trpc.settings.deleteColor.useMutation({ onSuccess: () => refetchColors() });
+  const createSize = trpc.settings.createSize.useMutation({ onSuccess: () => { refetchSizes(); setShowSizeDialog(false); } });
+  const updateSize = trpc.settings.updateSize.useMutation({ onSuccess: () => { refetchSizes(); setShowSizeDialog(false); } });
+  const deleteSize = trpc.settings.deleteSize.useMutation({ onSuccess: () => refetchSizes() });
 
   const [form, setForm] = useState<any>({});
   const [showWarehouseDialog, setShowWarehouseDialog] = useState(false);
@@ -43,14 +51,20 @@ export default function Settings() {
   const [showDiscountDialog, setShowDiscountDialog] = useState(false);
   const [editDiscount, setEditDiscount] = useState<any>(null);
   const [discountForm, setDiscountForm] = useState({ name: "", nameEn: "", type: "percentage" as "percentage" | "fixed", value: "", minPurchase: "", maxUses: "", isActive: true, startDate: "", endDate: "" });
+  // Colors
+  const [showColorDialog, setShowColorDialog] = useState(false);
+  const [editColor, setEditColor] = useState<any>(null);
+  const [colorForm, setColorForm] = useState({ name: "", nameEn: "", hex: "#000000", sortOrder: "" });
+  // Sizes
+  const [showSizeDialog, setShowSizeDialog] = useState(false);
+  const [editSize, setEditSize] = useState<any>(null);
+  const [sizeForm, setSizeForm] = useState({ name: "", nameEn: "", sortOrder: "" });
 
   useEffect(() => {
     if (settings) setForm(settings);
   }, [settings]);
 
   const handleSave = async () => {
-    // Only send fields accepted by the backend Zod schema
-    // Convert null values to undefined so Zod optional() accepts them
     const allowedFields = [
       "storeName", "storeNameEn", "storePhone", "storeEmail",
       "storeAddress", "storeAddressEn", "storeLogo",
@@ -63,7 +77,6 @@ export default function Settings() {
     const payload: any = {};
     for (const key of allowedFields) {
       const val = form[key];
-      // Skip null/undefined - Zod optional() expects undefined not null
       if (val !== undefined && val !== null) payload[key] = val;
     }
     try {
@@ -90,6 +103,24 @@ export default function Settings() {
     }
   };
 
+  const handleColorSubmit = async () => {
+    const data = { name: colorForm.name, nameEn: colorForm.nameEn || undefined, hex: colorForm.hex || "#000000", sortOrder: colorForm.sortOrder ? parseInt(colorForm.sortOrder) : undefined };
+    if (editColor) {
+      await updateColor.mutateAsync({ id: editColor.id, ...data });
+    } else {
+      await createColor.mutateAsync(data);
+    }
+  };
+
+  const handleSizeSubmit = async () => {
+    const data = { name: sizeForm.name, nameEn: sizeForm.nameEn || undefined, sortOrder: sizeForm.sortOrder ? parseInt(sizeForm.sortOrder) : undefined };
+    if (editSize) {
+      await updateSize.mutateAsync({ id: editSize.id, ...data });
+    } else {
+      await createSize.mutateAsync(data);
+    }
+  };
+
   return (
     <div className="p-6 space-y-4">
       <h1 className="text-2xl font-bold">{t("settings.title")}</h1>
@@ -102,6 +133,8 @@ export default function Settings() {
           <TabsTrigger value="warehouses" className="gap-1"><Package className="h-3 w-3" />{isAr ? "المستودعات" : "Warehouses"}</TabsTrigger>
           <TabsTrigger value="categories" className="gap-1"><Tag className="h-3 w-3" />{isAr ? "التصنيفات" : "Categories"}</TabsTrigger>
           <TabsTrigger value="discounts" className="gap-1"><Tag className="h-3 w-3" />{isAr ? "الخصومات" : "Discounts"}</TabsTrigger>
+          <TabsTrigger value="colors" className="gap-1"><Palette className="h-3 w-3" />{isAr ? "الألوان" : "Colors"}</TabsTrigger>
+          <TabsTrigger value="sizes" className="gap-1"><Ruler className="h-3 w-3" />{isAr ? "المقاسات" : "Sizes"}</TabsTrigger>
         </TabsList>
 
         {/* Store Settings */}
@@ -142,7 +175,6 @@ export default function Settings() {
                   <Label>{isAr ? "رمز العملة" : "Currency Symbol"}</Label>
                   <Input value={form.currencySymbol || "ر.س"} onChange={e => setForm((f: any) => ({ ...f, currencySymbol: e.target.value }))} />
                 </div>
-
                 <div className="col-span-2 space-y-1">
                   <Label>{isAr ? "العنوان" : "Address"}</Label>
                   <Textarea value={form.storeAddress || ""} onChange={e => setForm((f: any) => ({ ...f, storeAddress: e.target.value }))} rows={2} />
@@ -160,7 +192,6 @@ export default function Settings() {
         {/* WhatsApp Settings */}
         <TabsContent value="whatsapp" className="mt-4">
           <div className="space-y-4">
-            {/* QR Connection Card */}
             <Card>
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
@@ -175,7 +206,6 @@ export default function Settings() {
                 <WhatsAppSetup />
               </CardContent>
             </Card>
-            {/* Message Template */}
             <Card>
               <CardHeader><CardTitle className="text-base">{isAr ? "قالب رسالة الفاتورة" : "Invoice Message Template"}</CardTitle></CardHeader>
               <CardContent className="space-y-3">
@@ -357,6 +387,110 @@ export default function Settings() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* Colors */}
+        <TabsContent value="colors" className="mt-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="text-base">{isAr ? "ألوان المنتجات" : "Product Colors"}</CardTitle>
+              <Button size="sm" className="gap-1" onClick={() => { setEditColor(null); setColorForm({ name: "", nameEn: "", hex: "#000000", sortOrder: "" }); setShowColorDialog(true); }}>
+                <Plus className="h-3 w-3" />{isAr ? "إضافة لون" : "Add Color"}
+              </Button>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-12">{isAr ? "اللون" : "Color"}</TableHead>
+                    <TableHead>{isAr ? "الاسم (عربي)" : "Name (AR)"}</TableHead>
+                    <TableHead>{isAr ? "الاسم (إنجليزي)" : "Name (EN)"}</TableHead>
+                    <TableHead>{isAr ? "كود HEX" : "HEX Code"}</TableHead>
+                    <TableHead>{t("common.actions")}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {(colors || []).map((c: any) => (
+                    <TableRow key={c.id}>
+                      <TableCell>
+                        <span className="w-8 h-8 rounded-full border-2 border-border inline-block" style={{ backgroundColor: c.hex || "#cccccc" }} />
+                      </TableCell>
+                      <TableCell className="font-medium">{c.name}</TableCell>
+                      <TableCell className="text-muted-foreground">{c.nameEn || "-"}</TableCell>
+                      <TableCell className="font-mono text-sm text-muted-foreground">{c.hex || "-"}</TableCell>
+                      <TableCell>
+                        <div className="flex gap-1">
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditColor(c); setColorForm({ name: c.name, nameEn: c.nameEn || "", hex: c.hex || "#000000", sortOrder: c.sortOrder ? String(c.sortOrder) : "" }); setShowColorDialog(true); }}>
+                            <Edit className="h-3 w-3" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteColor.mutate({ id: c.id })}>
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {(!colors || colors.length === 0) && (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                        {isAr ? "لا توجد ألوان مضافة بعد" : "No colors added yet"}
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Sizes */}
+        <TabsContent value="sizes" className="mt-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="text-base">{isAr ? "مقاسات المنتجات" : "Product Sizes"}</CardTitle>
+              <Button size="sm" className="gap-1" onClick={() => { setEditSize(null); setSizeForm({ name: "", nameEn: "", sortOrder: "" }); setShowSizeDialog(true); }}>
+                <Plus className="h-3 w-3" />{isAr ? "إضافة مقاس" : "Add Size"}
+              </Button>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{isAr ? "المقاس" : "Size"}</TableHead>
+                    <TableHead>{isAr ? "الاسم (إنجليزي)" : "Name (EN)"}</TableHead>
+                    <TableHead>{isAr ? "الترتيب" : "Order"}</TableHead>
+                    <TableHead>{t("common.actions")}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {(sizes || []).map((s: any) => (
+                    <TableRow key={s.id}>
+                      <TableCell className="font-medium font-mono">{s.name}</TableCell>
+                      <TableCell className="text-muted-foreground">{s.nameEn || "-"}</TableCell>
+                      <TableCell className="text-muted-foreground">{s.sortOrder ?? "-"}</TableCell>
+                      <TableCell>
+                        <div className="flex gap-1">
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditSize(s); setSizeForm({ name: s.name, nameEn: s.nameEn || "", sortOrder: s.sortOrder ? String(s.sortOrder) : "" }); setShowSizeDialog(true); }}>
+                            <Edit className="h-3 w-3" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteSize.mutate({ id: s.id })}>
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {(!sizes || sizes.length === 0) && (
+                    <TableRow>
+                      <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                        {isAr ? "لا توجد مقاسات مضافة بعد" : "No sizes added yet"}
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
 
       {/* Warehouse Dialog */}
@@ -420,6 +554,74 @@ export default function Settings() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowDiscountDialog(false)}>{t("common.cancel")}</Button>
             <Button onClick={handleDiscountSubmit}>{t("common.save")}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Color Dialog */}
+      <Dialog open={showColorDialog} onOpenChange={setShowColorDialog}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>{editColor ? (isAr ? "تعديل اللون" : "Edit Color") : (isAr ? "إضافة لون" : "Add Color")}</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label>{isAr ? "الاسم (عربي)" : "Name (Arabic)"} <span className="text-destructive">*</span></Label>
+              <Input value={colorForm.name} onChange={e => setColorForm(f => ({ ...f, name: e.target.value }))} placeholder={isAr ? "أسود" : "Black"} />
+            </div>
+            <div className="space-y-1">
+              <Label>{isAr ? "الاسم (إنجليزي)" : "Name (English)"}</Label>
+              <Input value={colorForm.nameEn} onChange={e => setColorForm(f => ({ ...f, nameEn: e.target.value }))} placeholder="Black" dir="ltr" />
+            </div>
+            <div className="space-y-1">
+              <Label>{isAr ? "كود اللون (HEX)" : "Color Code (HEX)"}</Label>
+              <div className="flex gap-2 items-center">
+                <input
+                  type="color"
+                  value={colorForm.hex}
+                  onChange={e => setColorForm(f => ({ ...f, hex: e.target.value }))}
+                  className="w-12 h-10 rounded border border-input cursor-pointer"
+                />
+                <Input
+                  value={colorForm.hex}
+                  onChange={e => setColorForm(f => ({ ...f, hex: e.target.value }))}
+                  placeholder="#000000"
+                  dir="ltr"
+                  className="font-mono"
+                />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label>{isAr ? "الترتيب" : "Sort Order"}</Label>
+              <Input type="number" value={colorForm.sortOrder} onChange={e => setColorForm(f => ({ ...f, sortOrder: e.target.value }))} placeholder="0" dir="ltr" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowColorDialog(false)}>{t("common.cancel")}</Button>
+            <Button onClick={handleColorSubmit} disabled={!colorForm.name.trim()}>{t("common.save")}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Size Dialog */}
+      <Dialog open={showSizeDialog} onOpenChange={setShowSizeDialog}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>{editSize ? (isAr ? "تعديل المقاس" : "Edit Size") : (isAr ? "إضافة مقاس" : "Add Size")}</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label>{isAr ? "المقاس" : "Size"} <span className="text-destructive">*</span></Label>
+              <Input value={sizeForm.name} onChange={e => setSizeForm(f => ({ ...f, name: e.target.value }))} placeholder="XL, 42, Free Size..." dir="ltr" />
+            </div>
+            <div className="space-y-1">
+              <Label>{isAr ? "الاسم (إنجليزي)" : "Name (English)"}</Label>
+              <Input value={sizeForm.nameEn} onChange={e => setSizeForm(f => ({ ...f, nameEn: e.target.value }))} placeholder="Extra Large" dir="ltr" />
+            </div>
+            <div className="space-y-1">
+              <Label>{isAr ? "الترتيب" : "Sort Order"}</Label>
+              <Input type="number" value={sizeForm.sortOrder} onChange={e => setSizeForm(f => ({ ...f, sortOrder: e.target.value }))} placeholder="0" dir="ltr" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowSizeDialog(false)}>{t("common.cancel")}</Button>
+            <Button onClick={handleSizeSubmit} disabled={!sizeForm.name.trim()}>{t("common.save")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -388,6 +388,184 @@ export default function POS() {
     }
   };
 
+  const handleThermalPrint = () => {
+    if (!completedInvoice) return;
+    const inv = completedInvoice;
+    const storeName = isAr ? (settings?.storeName || "Darin Madani") : (settings?.storeNameEn || settings?.storeName || "Darin Madani");
+    const logoUrl = settings?.storeLogo ? (settings.storeLogo.startsWith("http") ? settings.storeLogo : window.location.origin + settings.storeLogo) : "";
+    const taxNumber = settings?.taxNumber || "";
+    const invoiceTotal = Number(inv.total);
+    const invoiceTaxAmount = Number(inv.taxAmount || 0);
+    const invoiceDiscountAmount = Number(inv.discountAmount || 0);
+    const invoiceTaxRate = Number(inv.taxRate || 0);
+    const invoiceDate = inv.createdAt ? new Date(inv.createdAt).toISOString() : new Date().toISOString();
+    const currency2 = (settings?.currencySymbol) || currency || "ر.س";
+    const storePhone = settings?.storePhone || "";
+    const storeAddress = isAr ? (settings?.storeAddress || "") : (settings?.storeAddressEn || settings?.storeAddress || "");
+    const invoiceNote = isAr ? (settings?.invoiceNote || "") : (settings?.invoiceNoteEn || settings?.invoiceNote || "");
+    const dateStr = new Date().toLocaleDateString(isAr ? "ar-SA" : "en-US");
+    const timeStr = new Date().toLocaleTimeString(isAr ? "ar-SA" : "en-US", { hour: "2-digit", minute: "2-digit" });
+    const paymentLabel = inv.paymentMethod === "cash" ? (isAr ? "نقداً" : "Cash") : inv.paymentMethod === "card" ? (isAr ? "بطاقة" : "Card") : inv.paymentMethod === "bank_transfer" ? (isAr ? "تحويل" : "Transfer") : (inv.paymentMethod || "");
+
+    function buildZATCA(): string {
+      function tlv(tag: number, value: string): number[] {
+        const enc = new TextEncoder();
+        const valBytes = Array.from(enc.encode(String(value)));
+        return [tag, valBytes.length, ...valBytes];
+      }
+      const bytes = [
+        ...tlv(1, storeName),
+        ...tlv(2, taxNumber),
+        ...tlv(3, invoiceDate),
+        ...tlv(4, invoiceTotal.toFixed(2)),
+        ...tlv(5, invoiceTaxAmount.toFixed(2)),
+      ];
+      let binary = "";
+      bytes.forEach(b => (binary += String.fromCharCode(b)));
+      return btoa(binary);
+    }
+    const zatcaBase64 = buildZATCA();
+    const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(zatcaBase64)}`;
+
+    const SC = 4;
+    const PW_PX = Math.round(80 * 3.7795 * SC);
+    const MG = 12 * SC;
+    const CW = PW_PX - MG * 2;
+    function fs(n: number) { return n * SC / 3; }
+    function lh(n: number) { return n * SC / 3 * 2.2; }
+
+    interface CLine { type: string; text?: string; lbl?: string; val?: string; fontSize?: number; bold?: boolean; h: number; url?: string; }
+    const lines: CLine[] = [];
+    const aC = (t: string, sz: number, b?: boolean) => lines.push({ type: "center", text: t, fontSize: fs(sz), h: lh(sz) + 2, bold: !!b });
+    const aR = (l: string, v: string, sz?: number) => lines.push({ type: "row", lbl: l, val: v, fontSize: fs(sz || 13), h: lh(sz || 13) });
+    const aD = () => lines.push({ type: "divider", h: 12 * SC / 3 });
+    const aT = (t: string, sz?: number) => lines.push({ type: "text", text: t, fontSize: fs(sz || 13), h: lh(sz || 13) });
+
+    if (logoUrl) lines.push({ type: "logo", url: logoUrl, h: 55 * SC / 3 + 8 });
+    aC(storeName, 15, true);
+    if (taxNumber) aC((isAr ? "الرقم الضريبي: " : "Tax #: ") + taxNumber, 11);
+    if (storePhone) aC(storePhone, 12);
+    if (storeAddress) aC(storeAddress, 11);
+    aD();
+    aR(isAr ? "فاتورة رقم:" : "Invoice #:", inv.invoiceNumber, 12);
+    aR(isAr ? "التاريخ:" : "Date:", dateStr, 12);
+    aR(isAr ? "الوقت:" : "Time:", timeStr, 12);
+    if (paymentLabel) aR(isAr ? "طريقة الدفع:" : "Payment:", paymentLabel, 12);
+    if (inv.customer) {
+      aD();
+      aT(isAr ? "معلومات العميل" : "Customer Info", 12);
+      aR(isAr ? "الاسم:" : "Name:", inv.customer.name, 12);
+      if (inv.customer.phone) aR(isAr ? "الجوال:" : "Phone:", inv.customer.phone, 12);
+      if (inv.customer.email) aR(isAr ? "البريد:" : "Email:", inv.customer.email, 11);
+      if (inv.customer.address) aR(isAr ? "العنوان:" : "Address:", inv.customer.address, 12);
+      if (inv.customer.customerNumber) aR(isAr ? "رقم العميل:" : "Cust.#:", inv.customer.customerNumber, 12);
+    }
+    aD();
+    (inv.items || []).forEach((item: any) => {
+      aT(item.productName || "", 13);
+      const meta = [item.sku ? "SKU: " + item.sku : "", item.barcode ? (isAr ? "باركود: " : "Barcode: ") + item.barcode : "", item.color || "", item.size || ""].filter(Boolean).join("  |  ");
+      if (meta) aT(meta, 10);
+      aR(item.qty + " × " + Number(item.unitPrice).toLocaleString(), Number(item.lineTotal).toLocaleString() + " " + currency2, 13);
+      if (item.itemDiscount > 0) aR(isAr ? "خصم:" : "Disc:", "-" + Number(item.itemDiscount).toFixed(2), 11);
+      lines.push({ type: "gap", h: 4 });
+    });
+    if (inv.notes) { aD(); aT((isAr ? "ملاحظات: " : "Notes: ") + inv.notes, 12); }
+    aD();
+    if (invoiceDiscountAmount > 0) aR(isAr ? "خصم:" : "Disc:", "-" + invoiceDiscountAmount.toFixed(2), 12);
+    if (invoiceTaxRate > 0) aR((isAr ? "ضريبة " : "Tax ") + invoiceTaxRate + "%:", invoiceTaxAmount.toFixed(2), 12);
+    lines.push({ type: "totalrow", lbl: isAr ? "الإجمالي:" : "Total:", val: invoiceTotal.toLocaleString() + " " + currency2, fontSize: fs(15), h: lh(15) + 4 });
+    aD();
+    lines.push({ type: "qr", h: 80 * SC / 3 + 20 });
+    aD();
+    if (invoiceNote) aC(invoiceNote, 13);
+    lines.push({ type: "gap", h: 50 * 3.7795 * SC / 3 });
+    aC(isAr ? "شكراً لزيارتكم" : "Thank you for your visit", 16, true);
+    lines.push({ type: "gap", h: 20 * 3.7795 * SC / 3 });
+
+    const invoiceNum = inv.invoiceNumber;
+    const linesJson = JSON.stringify(lines);
+    const qrUrlJson = JSON.stringify(qrApiUrl);
+    const logoUrlJson = JSON.stringify(logoUrl);
+    const invoiceNumJson = JSON.stringify(invoiceNum);
+    const isArJs = isAr ? "true" : "false";
+
+    const thermalHtml = `<!DOCTYPE html>
+<html dir="${isAr ? "rtl" : "ltr"}">
+<head><meta charset="utf-8"><title>${isAr ? "فاتورة" : "Invoice"} ${invoiceNum}</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#888;display:flex;flex-direction:column;align-items:center;padding:10px;font-family:sans-serif}
+canvas{background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.4)}
+#btnBar{display:flex;gap:8px;margin-top:10px}
+#btnBar button{padding:10px 20px;font-size:14px;font-weight:bold;border:none;border-radius:5px;cursor:pointer}
+#btnPdf{background:#1a56db;color:#fff}#btnPrint{background:#16a34a;color:#fff}
+#btnPdf:disabled{background:#aaa}
+@media print{body{background:#fff;padding:0}#btnBar{display:none!important}canvas{box-shadow:none}@page{size:80mm auto;margin:0}}
+</style></head>
+<body>
+<canvas id="c"></canvas>
+<div id="btnBar">
+  <button id="btnPdf">${isAr ? "⬇ تحميل PDF" : "⬇ Download PDF"}</button>
+  <button id="btnPrint">${isAr ? "🖨 طباعة" : "🖨 Print"}</button>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"><\/script>
+<script>
+(function(){
+var SC=${SC},PW=${PW_PX},MG=${MG},CW=${CW};
+var isAr=${isArJs};
+var invoiceNum=${invoiceNumJson};
+var qrUrl=${qrUrlJson};
+var logoUrl=${logoUrlJson};
+var lines=${linesJson};
+var canvas=document.getElementById('c');
+canvas.style.width=Math.round(PW/SC)+'px';
+function draw(qrImg,logoImg){
+  var totalH=lines.reduce(function(s,l){return s+l.h;},0)+MG*2;
+  canvas.width=PW;canvas.height=Math.ceil(totalH);
+  canvas.style.height=Math.ceil(totalH/SC)+'px';
+  var ctx=canvas.getContext('2d');
+  ctx.fillStyle='#fff';ctx.fillRect(0,0,PW,canvas.height);
+  var y=MG;
+  for(var i=0;i<lines.length;i++){
+    var l=lines[i];ctx.save();ctx.textBaseline='top';
+    if(l.type==='center'){ctx.font=(l.bold?'bold ':'')+l.fontSize+'px Tahoma,Arial';ctx.fillStyle='#000';ctx.textAlign='center';ctx.fillText(l.text||'',PW/2,y+2);}
+    else if(l.type==='text'){ctx.font=l.fontSize+'px Tahoma,Arial';ctx.fillStyle='#333';ctx.textAlign='right';ctx.fillText(l.text||'',PW-MG,y+2);}
+    else if(l.type==='row'){ctx.font=l.fontSize+'px Tahoma,Arial';ctx.fillStyle='#000';ctx.textAlign='right';ctx.fillText(l.lbl||'',PW-MG,y+2);ctx.textAlign='left';ctx.fillText(l.val||'',MG,y+2);}
+    else if(l.type==='totalrow'){ctx.font='bold '+l.fontSize+'px Tahoma,Arial';ctx.fillStyle='#000';ctx.textAlign='right';ctx.fillText(l.lbl||'',PW-MG,y+2);ctx.textAlign='left';ctx.fillText(l.val||'',MG,y+2);}
+    else if(l.type==='divider'){ctx.strokeStyle='#000';ctx.lineWidth=2.5;ctx.setLineDash([4,3]);ctx.beginPath();ctx.moveTo(MG,y+l.h/2);ctx.lineTo(PW-MG,y+l.h/2);ctx.stroke();}
+    else if(l.type==='qr'&&qrImg){var qs=80*SC/3;ctx.drawImage(qrImg,(PW-qs)/2,y+5,qs,qs);ctx.font=(10*SC/3)+'px Tahoma,Arial';ctx.fillStyle='#555';ctx.textAlign='center';ctx.fillText(isAr?'رمز ZATCA':'ZATCA QR',PW/2,y+qs+8);}
+    else if(l.type==='logo'&&logoImg){var mh=55*SC/3;var r=Math.min(CW/logoImg.naturalWidth,mh/logoImg.naturalHeight);var w=logoImg.naturalWidth*r,h=logoImg.naturalHeight*r;ctx.drawImage(logoImg,(PW-w)/2,y+4,w,h);}
+    ctx.restore();y+=l.h;
+  }
+}
+var qrImg=null,logoImg=null,qrDone=false,logoDone=false;
+function tryDraw(){if(qrDone&&logoDone)draw(qrImg,logoImg);}
+if(qrUrl){var qi=new Image();qi.crossOrigin='anonymous';qi.onload=function(){qrImg=qi;qrDone=true;tryDraw();};qi.onerror=function(){qrDone=true;tryDraw();};qi.src=qrUrl;}else{qrDone=true;}
+if(logoUrl){var li=new Image();li.onload=function(){logoImg=li;logoDone=true;tryDraw();};li.onerror=function(){logoDone=true;tryDraw();};li.src=logoUrl;}else{logoDone=true;}
+tryDraw();
+document.getElementById('btnPrint').onclick=function(){
+  var d=canvas.toDataURL('image/png');
+  var win=window.open('','_blank');
+  win.document.write('<html><head><style>@page{size:80mm auto;margin:0}body{margin:0}img{width:80mm;display:block}<\/style><\/head><body><img src="'+d+'"><\/body><\/html>');
+  win.document.close();win.onload=function(){win.print();};
+};
+document.getElementById('btnPdf').onclick=function(){
+  var btn=document.getElementById('btnPdf');btn.disabled=true;btn.textContent=isAr?'جاري التحضير...':'Preparing...';
+  var imgData=canvas.toDataURL('image/png');
+  var pw=80,ph=Math.round((canvas.height/canvas.width)*pw);
+  var pdf=new window.jspdf.jsPDF({unit:'mm',format:[pw,ph],orientation:'portrait'});
+  pdf.addImage(imgData,'PNG',0,0,pw,ph);
+  pdf.save('invoice-'+invoiceNum+'.pdf');
+  btn.disabled=false;btn.textContent=isAr?'⬇ تحميل PDF':'⬇ Download PDF';
+};
+})();
+<\/script>
+</body></html>`;
+
+    const win = window.open("", "_blank", "width=220,height=900");
+    if (win) { win.document.write(thermalHtml); win.document.close(); }
+  };
+
   const handlePrintReceipt = () => {
     if (!completedInvoice) return;
     const inv = completedInvoice;
@@ -997,6 +1175,12 @@ export default function POS() {
                 <Printer size={14} />
                 {t("pos.printReceipt")}
               </Button>
+              <Button variant="outline" className="flex-1 gap-2 text-orange-600 border-orange-200 hover:bg-orange-50" onClick={handleThermalPrint}>
+                <Printer size={14} />
+                {isAr ? "حرارية 58mm" : "Thermal 58mm"}
+              </Button>
+            </div>
+            <div className="flex gap-2 w-full">
               <Button
                 variant="outline"
                 className="flex-1 gap-2 text-green-600 border-green-200 hover:bg-green-50"

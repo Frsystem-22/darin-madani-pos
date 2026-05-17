@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { getSettings, updateSettings, getWarehouses, createWarehouse, updateWarehouse, deleteWarehouse, getCategories, createCategory, updateCategory, deleteCategory, getDiscounts, createDiscount, updateDiscount, deleteDiscount } from "../db";
+import { getSettings, updateSettings, getWarehouses, createWarehouse, updateWarehouse, deleteWarehouse, getCategories, createCategory, updateCategory, deleteCategory, getDiscounts, createDiscount, updateDiscount, deleteDiscount, getColors, createColor, updateColor, deleteColor, getSizes, createSize, updateSize, deleteSize } from "../db";
 import { protectedProcedure, router } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 
@@ -35,7 +35,7 @@ export const settingsRouter = router({
     myfatoorahEnabled: z.boolean().optional(),
     myfatoorahToken: z.string().optional(),
     myfatoorahEnv: z.enum(["sandbox", "live"]).optional(),
-    myfatoorahSupplier: z.string().optional(), // ثابت = 24 لـ Darin Madani
+    myfatoorahSupplier: z.string().optional(),
     priceIncludesTax: z.boolean().optional(),
   })).mutation(async ({ input }) => {
     await updateSettings(input as any);
@@ -144,6 +144,68 @@ export const settingsRouter = router({
 
   deleteDiscount: adminOnly.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
     await deleteDiscount(input.id);
+    return { success: true };
+  }),
+
+  // Colors
+  getColors: protectedProcedure.query(async () => {
+    return await getColors();
+  }),
+
+  createColor: adminOnly.input(z.object({
+    name: z.string().min(1),
+    nameEn: z.string().optional(),
+    hex: z.string().optional(),
+    sortOrder: z.number().optional(),
+  })).mutation(async ({ input }) => {
+    await createColor(input as any);
+    return { success: true };
+  }),
+
+  updateColor: adminOnly.input(z.object({
+    id: z.number(),
+    name: z.string().optional(),
+    nameEn: z.string().optional(),
+    hex: z.string().optional(),
+    sortOrder: z.number().optional(),
+    isActive: z.boolean().optional(),
+  })).mutation(async ({ input: { id, ...data } }) => {
+    await updateColor(id, data as any);
+    return { success: true };
+  }),
+
+  deleteColor: adminOnly.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+    await deleteColor(input.id);
+    return { success: true };
+  }),
+
+  // Sizes
+  getSizes: protectedProcedure.query(async () => {
+    return await getSizes();
+  }),
+
+  createSize: adminOnly.input(z.object({
+    name: z.string().min(1),
+    nameEn: z.string().optional(),
+    sortOrder: z.number().optional(),
+  })).mutation(async ({ input }) => {
+    await createSize(input as any);
+    return { success: true };
+  }),
+
+  updateSize: adminOnly.input(z.object({
+    id: z.number(),
+    name: z.string().optional(),
+    nameEn: z.string().optional(),
+    sortOrder: z.number().optional(),
+    isActive: z.boolean().optional(),
+  })).mutation(async ({ input: { id, ...data } }) => {
+    await updateSize(id, data as any);
+    return { success: true };
+  }),
+
+  deleteSize: adminOnly.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+    await deleteSize(input.id);
     return { success: true };
   }),
 });

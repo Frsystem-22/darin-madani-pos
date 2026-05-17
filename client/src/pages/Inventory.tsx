@@ -1,4 +1,5 @@
 import { useState, useRef } from "react";
+import React from "react";
 import { useTranslation } from "react-i18next";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
@@ -46,6 +47,8 @@ export default function Inventory() {
   const { data: products, refetch } = trpc.products.list.useQuery({ search: search || undefined, categoryId: categoryFilter !== "all" ? parseInt(categoryFilter) : undefined });
   const { data: categories } = trpc.settings.getCategories.useQuery();
   const { data: warehouses } = trpc.settings.getWarehouses.useQuery();
+  const { data: colors } = trpc.settings.getColors.useQuery();
+  const { data: sizes } = trpc.settings.getSizes.useQuery();
 
   const createProduct = trpc.products.create.useMutation({ onSuccess: () => { refetch(); setShowAddDialog(false); toast.success(isAr ? "تم إضافة المنتج" : "Product added"); } });
   const updateProduct = trpc.products.update.useMutation({ onSuccess: () => { refetch(); setEditProduct(null); toast.success(isAr ? "تم تحديث المنتج" : "Product updated"); } });
@@ -63,6 +66,8 @@ export default function Inventory() {
     initialStock: [] as { warehouseId: number; qty: number }[],
   });
 
+  const [formErrors, setFormErrors] = useState<{name?:string; salePrice?:string}>({});
+
   const [stockForm, setStockForm] = useState({ warehouseId: "1", toWarehouseId: "2", qty: "1", costPrice: "", notes: "" });
 
   const resetForm = () => setForm({ name: "", nameEn: "", description: "", descriptionEn: "", categoryId: "", color: "", colorEn: "", colorHex: "#000000", size: "", costPrice: "", salePrice: "", sku: "", lowStockAlert: "5", images: [], initialStock: [] });
@@ -76,16 +81,22 @@ export default function Inventory() {
       sku: p.sku || "", lowStockAlert: String(p.lowStockAlert || "5"),
       images: p.images || [], initialStock: [],
     });
+    setFormErrors({});
     setEditProduct(p);
   };
 
   const handleSubmit = async () => {
-    if (!form.name || !form.salePrice) { toast.error(isAr ? "يرجى ملء الحقول المطلوبة" : "Fill required fields"); return; }
-    const data: any = { ...form, categoryId: form.categoryId ? parseInt(form.categoryId) : undefined, lowStockAlert: parseInt(form.lowStockAlert) };
+    const errors: {name?:string; salePrice?:string} = {};
+    if (!form.name.trim()) errors.name = isAr ? "اسم المنتج مطلوب" : "Product name is required";
+    if (!form.salePrice) errors.salePrice = isAr ? "سعر البيع مطلوب" : "Sale price is required";
+    if (Object.keys(errors).length > 0) { setFormErrors(errors); toast.error(isAr ? "يرجى ملء الحقول المطلوبة" : "Fill required fields"); return; }
+    setFormErrors({});
+    const { initialStock, ...formData } = form;
+    const data: any = { ...formData, categoryId: formData.categoryId ? parseInt(formData.categoryId) : undefined, lowStockAlert: parseInt(formData.lowStockAlert) };
     if (editProduct) {
       await updateProduct.mutateAsync({ id: editProduct.id, ...data });
     } else {
-      await createProduct.mutateAsync(data);
+      await createProduct.mutateAsync({ ...data, initialStock });
     }
   };
 
@@ -98,7 +109,6 @@ export default function Inventory() {
         URL.revokeObjectURL(url);
         const canvas = document.createElement('canvas');
         let { width, height } = img;
-        // Scale down if needed (max 1920px)
         const MAX_DIM = 1920;
         if (width > MAX_DIM || height > MAX_DIM) {
           const ratio = Math.min(MAX_DIM / width, MAX_DIM / height);
@@ -109,7 +119,6 @@ export default function Inventory() {
         canvas.height = height;
         const ctx = canvas.getContext('2d')!;
         ctx.drawImage(img, 0, 0, width, height);
-        // Try quality 0.85 first, reduce if still too large
         const tryCompress = (quality: number) => {
           canvas.toBlob(blob => {
             if (!blob) { reject(new Error('Compression failed')); return; }
@@ -133,7 +142,6 @@ export default function Inventory() {
     try {
       const newUrls: string[] = [];
       for (const file of Array.from(files)) {
-        // Compress before upload
         const compressed = await compressImage(file, 2);
         const fd = new FormData();
         fd.append("file", new File([compressed], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' }));
@@ -162,14 +170,40 @@ export default function Inventory() {
     }
   };
 
-  const SIZES = ["XS", "S", "M", "L", "XL", "XXL", "XXXL", "34", "36", "38", "40", "42", "44", "46", "48", "Free Size"];
+  // Handle color selection from dropdown
+  const handleColorSelect = (colorId: string) => {
+    if (!colorId || colorId === "__none__") {
+      setForm(f => ({ ...f, color: "", colorEn: "", colorHex: "#000000" }));
+      return;
+    }
+    const c = (colors || []).find((x: any) => String(x.id) === colorId);
+    if (c) {
+      setForm(f => ({ ...f, color: c.name || "", colorEn: c.nameEn || "", colorHex: c.hex || "#000000" }));
+    }
+  };
+
+  // Handle size selection from dropdown
+  const handleSizeSelect = (sizeId: string) => {
+    if (!sizeId || sizeId === "__none__") {
+      setForm(f => ({ ...f, size: "" }));
+      return;
+    }
+    const s = (sizes || []).find((x: any) => String(x.id) === sizeId);
+    if (s) {
+      setForm(f => ({ ...f, size: s.name || "" }));
+    }
+  };
+
+  // Find current selected color id
+  const selectedColorId = (colors || []).find((c: any) => c.name === form.color)?.id;
+  const selectedSizeId = (sizes || []).find((s: any) => s.name === form.size)?.id;
 
   return (
     <div className="p-6 space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">{t("inventory.title")}</h1>
-        <Button className="gap-2" onClick={() => { resetForm(); setShowAddDialog(true); }}>
+        <Button className="gap-2" onClick={() => { resetForm(); setFormErrors({}); setShowAddDialog(true); }}>
           <Plus size={16} />
           {t("inventory.addProduct")}
         </Button>
@@ -197,16 +231,17 @@ export default function Inventory() {
       {/* Products table */}
       <Card>
         <CardContent className="p-0">
-          <Table>
+          <div className="overflow-x-auto">
+          <Table className="min-w-[900px]">
             <TableHeader>
               <TableRow>
-                <TableHead>{t("inventory.productName")}</TableHead>
-                <TableHead>{t("inventory.category")}</TableHead>
-                <TableHead>{t("inventory.color")} / {t("inventory.size")}</TableHead>
-                <TableHead>{t("inventory.barcode")}</TableHead>
-                <TableHead>{t("inventory.salePrice")}</TableHead>
-                <TableHead>{t("inventory.totalStock")}</TableHead>
-                <TableHead>{t("common.actions")}</TableHead>
+                <TableHead className="w-[220px]">{t("inventory.productName")}</TableHead>
+                <TableHead className="w-[120px]">{t("inventory.category")}</TableHead>
+                <TableHead className="w-[130px]">{t("inventory.color")} / {t("inventory.size")}</TableHead>
+                <TableHead className="w-[180px]">{t("inventory.barcode")}</TableHead>
+                <TableHead className="w-[110px]">{t("inventory.salePrice")}</TableHead>
+                <TableHead className="w-[100px]">{t("inventory.totalStock")}</TableHead>
+                <TableHead className="w-[140px]">{t("common.actions")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -271,6 +306,7 @@ export default function Inventory() {
               })}
             </TableBody>
           </Table>
+          </div>
           {(!products || products.length === 0) && (
             <div className="py-12 text-center text-muted-foreground">
               <Package size={32} className="mx-auto mb-2 opacity-30" />
@@ -281,22 +317,31 @@ export default function Inventory() {
       </Card>
 
       {/* Add/Edit Product Dialog */}
-      <Dialog open={showAddDialog || !!editProduct} onOpenChange={v => { if (!v) { setShowAddDialog(false); setEditProduct(null); } }}>
+      <Dialog open={showAddDialog || !!editProduct} onOpenChange={v => { if (!v) { setShowAddDialog(false); setEditProduct(null); setFormErrors({}); } }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editProduct ? t("inventory.editProduct") : t("inventory.addProduct")}</DialogTitle>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-4">
+            {/* Product Name AR - Required */}
             <div className="space-y-1">
-              <Label>{t("inventory.productName")} *</Label>
-              <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="اسم المنتج" />
+              <Label>{t("inventory.productName")} <span className="text-destructive">*</span></Label>
+              <Input
+                value={form.name}
+                onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                placeholder="اسم المنتج"
+                className={formErrors.name ? "border-destructive" : ""}
+              />
+              {formErrors.name && <p className="text-xs text-destructive mt-1">{formErrors.name}</p>}
             </div>
+            {/* Product Name EN - Optional */}
             <div className="space-y-1">
-              <Label>{t("inventory.productNameEn")}</Label>
+              <Label>{t("inventory.productNameEn")} <span className="text-xs text-muted-foreground">({isAr ? "اختياري" : "optional"})</span></Label>
               <Input value={form.nameEn} onChange={e => setForm(f => ({ ...f, nameEn: e.target.value }))} placeholder="Product name" />
             </div>
+            {/* Category - Optional */}
             <div className="space-y-1">
-              <Label>{t("inventory.category")}</Label>
+              <Label>{t("inventory.category")} <span className="text-xs text-muted-foreground">({isAr ? "اختياري" : "optional"})</span></Label>
               <Select value={form.categoryId} onValueChange={v => setForm(f => ({ ...f, categoryId: v }))}>
                 <SelectTrigger><SelectValue placeholder={t("inventory.category")} /></SelectTrigger>
                 <SelectContent>
@@ -304,44 +349,105 @@ export default function Inventory() {
                 </SelectContent>
               </Select>
             </div>
+            {/* SKU - Optional */}
             <div className="space-y-1">
-              <Label>{t("inventory.sku")}</Label>
+              <Label>{t("inventory.sku")} <span className="text-xs text-muted-foreground">({isAr ? "اختياري" : "optional"})</span></Label>
               <Input value={form.sku} onChange={e => setForm(f => ({ ...f, sku: e.target.value }))} placeholder="SKU-001" />
             </div>
+            {/* Color - Optional - Dynamic from DB */}
             <div className="space-y-1">
-              <Label>{t("inventory.color")}</Label>
-              <div className="flex gap-2">
-                <Input value={form.color} onChange={e => setForm(f => ({ ...f, color: e.target.value }))} placeholder="أسود" />
-                <input type="color" value={form.colorHex} onChange={e => setForm(f => ({ ...f, colorHex: e.target.value }))} className="w-10 h-9 rounded border border-input cursor-pointer" />
+              <Label>{t("inventory.color")} <span className="text-xs text-muted-foreground">({isAr ? "اختياري" : "optional"})</span></Label>
+              {colors && colors.length > 0 ? (
+                <Select
+                  value={selectedColorId ? String(selectedColorId) : "__none__"}
+                  onValueChange={handleColorSelect}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={isAr ? "اختر لوناً" : "Select color"}>
+                      {form.color && (
+                        <span className="flex items-center gap-2">
+                          <span className="w-4 h-4 rounded-full border border-border inline-block" style={{ backgroundColor: form.colorHex || "#000000" }} />
+                          {isAr ? form.color : (form.colorEn || form.color)}
+                        </span>
+                      )}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">{isAr ? "— بدون لون —" : "— No color —"}</SelectItem>
+                    {(colors as any[]).map((c: any) => (
+                      <SelectItem key={c.id} value={String(c.id)}>
+                        <span className="flex items-center gap-2">
+                          <span className="w-4 h-4 rounded-full border border-border inline-block" style={{ backgroundColor: c.hex || "#cccccc" }} />
+                          {isAr ? c.name : (c.nameEn || c.name)}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <div className="flex gap-2">
+                  <Input value={form.color} onChange={e => setForm(f => ({ ...f, color: e.target.value }))} placeholder="أسود" />
+                  <input type="color" value={form.colorHex} onChange={e => setForm(f => ({ ...f, colorHex: e.target.value }))} className="w-10 h-9 rounded border border-input cursor-pointer" />
+                </div>
+              )}
+            </div>
+            {/* Color EN - Optional (only show if no colors in DB) */}
+            {(!colors || colors.length === 0) && (
+              <div className="space-y-1">
+                <Label>{t("inventory.color")} (EN) <span className="text-xs text-muted-foreground">({isAr ? "اختياري" : "optional"})</span></Label>
+                <Input value={form.colorEn} onChange={e => setForm(f => ({ ...f, colorEn: e.target.value }))} placeholder="Black" />
               </div>
-            </div>
+            )}
+            {/* Size - Optional - Dynamic from DB */}
             <div className="space-y-1">
-              <Label>{t("inventory.color")} (EN)</Label>
-              <Input value={form.colorEn} onChange={e => setForm(f => ({ ...f, colorEn: e.target.value }))} placeholder="Black" />
+              <Label>{t("inventory.size")} <span className="text-xs text-muted-foreground">({isAr ? "اختياري" : "optional"})</span></Label>
+              {sizes && sizes.length > 0 ? (
+                <Select
+                  value={selectedSizeId ? String(selectedSizeId) : "__none__"}
+                  onValueChange={handleSizeSelect}
+                >
+                  <SelectTrigger><SelectValue placeholder={isAr ? "اختر مقاساً" : "Select size"} /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">{isAr ? "— بدون مقاس —" : "— No size —"}</SelectItem>
+                    {(sizes as any[]).map((s: any) => (
+                      <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Select value={form.size} onValueChange={v => setForm(f => ({ ...f, size: v }))}>
+                  <SelectTrigger><SelectValue placeholder={t("inventory.size")} /></SelectTrigger>
+                  <SelectContent>
+                    {["XS","S","M","L","XL","XXL","XXXL","34","36","38","40","42","44","46","48","Free Size"].map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
+            {/* Low Stock Alert - Optional */}
             <div className="space-y-1">
-              <Label>{t("inventory.size")}</Label>
-              <Select value={form.size} onValueChange={v => setForm(f => ({ ...f, size: v }))}>
-                <SelectTrigger><SelectValue placeholder={t("inventory.size")} /></SelectTrigger>
-                <SelectContent>
-                  {SIZES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label>{t("inventory.lowStockAlert")}</Label>
+              <Label>{t("inventory.lowStockAlert")} <span className="text-xs text-muted-foreground">({isAr ? "اختياري" : "optional"})</span></Label>
               <Input value={form.lowStockAlert} onChange={e => setForm(f => ({ ...f, lowStockAlert: e.target.value }))} type="number" min="0" />
             </div>
+            {/* Cost Price - Optional */}
             <div className="space-y-1">
-              <Label>{t("inventory.costPrice")}</Label>
+              <Label>{t("inventory.costPrice")} <span className="text-xs text-muted-foreground">({isAr ? "اختياري" : "optional"})</span></Label>
               <Input value={form.costPrice} onChange={e => setForm(f => ({ ...f, costPrice: e.target.value }))} type="number" placeholder="0.00" />
             </div>
+            {/* Sale Price - Required */}
             <div className="space-y-1">
-              <Label>{t("inventory.salePrice")} *</Label>
-              <Input value={form.salePrice} onChange={e => setForm(f => ({ ...f, salePrice: e.target.value }))} type="number" placeholder="0.00" />
+              <Label>{t("inventory.salePrice")} <span className="text-destructive">*</span></Label>
+              <Input
+                value={form.salePrice}
+                onChange={e => setForm(f => ({ ...f, salePrice: e.target.value }))}
+                type="number"
+                placeholder="0.00"
+                className={formErrors.salePrice ? "border-destructive" : ""}
+              />
+              {formErrors.salePrice && <p className="text-xs text-destructive mt-1">{formErrors.salePrice}</p>}
             </div>
+            {/* Description - Optional */}
             <div className="col-span-2 space-y-1">
-              <Label>{t("inventory.description")}</Label>
+              <Label>{t("inventory.description")} <span className="text-xs text-muted-foreground">({isAr ? "اختياري" : "optional"})</span></Label>
               <Textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={2} />
             </div>
             {/* Product Images */}
@@ -349,6 +455,7 @@ export default function Inventory() {
               <Label className="flex items-center gap-2">
                 <ImagePlus size={14} />
                 {isAr ? "صور المنتج" : "Product Images"}
+                <span className="text-xs text-muted-foreground font-normal">({isAr ? "اختياري" : "optional"})</span>
               </Label>
               <div className="flex flex-wrap gap-2">
                 {form.images.map((url, idx) => (
@@ -391,7 +498,7 @@ export default function Inventory() {
             {/* Initial stock (only for new products) */}
             {!editProduct && (
               <div className="col-span-2 space-y-2">
-                <Label>{isAr ? "الكمية الأولية" : "Initial Stock"}</Label>
+                <Label>{isAr ? "الكمية الأولية" : "Initial Stock"} <span className="text-xs text-muted-foreground">({isAr ? "اختياري" : "optional"})</span></Label>
                 <div className="grid grid-cols-2 gap-2">
                   {(warehouses || []).map((w: any) => {
                     const s = form.initialStock.find(s => s.warehouseId === w.id);
@@ -420,7 +527,7 @@ export default function Inventory() {
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setShowAddDialog(false); setEditProduct(null); }}>{t("common.cancel")}</Button>
+            <Button variant="outline" onClick={() => { setShowAddDialog(false); setEditProduct(null); setFormErrors({}); }}>{t("common.cancel")}</Button>
             <Button onClick={handleSubmit} disabled={createProduct.isPending || updateProduct.isPending}>
               {t("common.save")}
             </Button>

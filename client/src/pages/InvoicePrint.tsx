@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "wouter";
 import { trpc } from "@/lib/trpc";
-import { Loader2, Printer, Share2, ArrowRight } from "lucide-react";
+import { Loader2, Printer, Share2, ArrowRight, Thermometer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useLocation } from "wouter";
 import JsBarcode from "jsbarcode";
@@ -151,6 +151,100 @@ export default function InvoicePrint() {
 
   const handlePrint = () => window.print();
 
+  const handleThermalPrint = () => {
+    const invoiceNum = invoice.invoiceNumber || `INV-${invoice.id}`;
+    const zatcaBase64 = buildZATCATLV(
+      storeName,
+      vatNumber,
+      invoice.createdAt ? new Date(invoice.createdAt).toISOString() : new Date().toISOString(),
+      total,
+      taxAmount
+    );
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent(zatcaBase64)}`;
+    const itemsHtml = (invoice.items || []).map((item: any) => {
+      const qty = item.qty ?? item.quantity ?? 1;
+      const price = Number(item.unitPrice || item.price || 0);
+      const lineTotal = qty * price;
+      const detail = [item.color, item.size].filter(Boolean).join(' · ');
+      return `<tr>
+        <td style="padding:2px 0;font-size:10px;">${item.productName || item.name || '—'}${detail ? `<br><span style="font-size:9px;color:#666">${detail}</span>` : ''}</td>
+        <td style="padding:2px 0;font-size:10px;text-align:center;">${qty}</td>
+        <td style="padding:2px 0;font-size:10px;text-align:left;">${price.toFixed(2)}</td>
+        <td style="padding:2px 0;font-size:10px;text-align:left;">${lineTotal.toFixed(2)}</td>
+      </tr>`;
+    }).join('');
+    const discountRow = discount > 0 ? `<tr><td colspan="2" style="font-size:10px;">الخصم</td><td colspan="2" style="font-size:10px;text-align:left;">- ${discount.toFixed(2)}</td></tr>` : '';
+    const html = `<!DOCTYPE html>
+<html dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>فاتورة ${invoiceNum}</title>
+<style>
+  @page { size: 58mm auto; margin: 2mm; }
+  * { box-sizing: border-box; }
+  body { font-family: 'Arial', sans-serif; width: 54mm; margin: 0 auto; font-size: 10px; color: #000; direction: rtl; }
+  .center { text-align: center; }
+  .bold { font-weight: bold; }
+  .divider { border-top: 1px dashed #000; margin: 3px 0; }
+  .logo { max-width: 40mm; max-height: 15mm; object-fit: contain; display: block; margin: 0 auto 3px; }
+  table { width: 100%; border-collapse: collapse; }
+  th { font-size: 9px; border-bottom: 1px solid #000; padding: 2px 0; }
+  .total-row { font-size: 12px; font-weight: bold; border-top: 1px solid #000; padding-top: 3px; }
+  .qr { display: block; margin: 4px auto; width: 20mm; height: 20mm; }
+  .footer { font-size: 9px; text-align: center; margin-top: 4px; }
+</style>
+</head>
+<body>
+<div class="center">
+  <img class="logo" src="${store?.storeLogo || '/logo-light.webp'}" onerror="this.style.display='none'" />
+  <div class="bold" style="font-size:12px;">${storeName}</div>
+  ${storePhone ? `<div style="font-size:9px;">${storePhone}</div>` : ''}
+  ${vatNumber ? `<div style="font-size:9px;">الرقم الضريبي: ${vatNumber}</div>` : ''}
+</div>
+<div class="divider"></div>
+<div style="font-size:9px;">
+  <div>فاتورة ضريبية: <span class="bold">${invoiceNum}</span></div>
+  <div>التاريخ: ${invoiceDate}</div>
+  <div>العميل: ${invoice.customerName || 'عميل نقدي'}</div>
+  <div>الدفع: ${paymentLabel}</div>
+</div>
+<div class="divider"></div>
+<table>
+  <thead><tr>
+    <th style="text-align:right;">المنتج</th>
+    <th style="text-align:center;">كمية</th>
+    <th style="text-align:left;">سعر</th>
+    <th style="text-align:left;">إجمالي</th>
+  </tr></thead>
+  <tbody>${itemsHtml}</tbody>
+</table>
+<div class="divider"></div>
+<table>
+  <tr><td style="font-size:10px;">المجموع الفرعي</td><td colspan="3" style="font-size:10px;text-align:left;">${subtotal.toFixed(2)} ر.س</td></tr>
+  ${discountRow}
+  <tr><td style="font-size:10px;">ضريبة (${taxRate}%)</td><td colspan="3" style="font-size:10px;text-align:left;">${taxAmount.toFixed(2)} ر.س</td></tr>
+  <tr class="total-row"><td>الإجمالي</td><td colspan="3" style="text-align:left;">${total.toFixed(2)} ر.س</td></tr>
+</table>
+<div class="divider"></div>
+<div class="center">
+  <img class="qr" src="${qrUrl}" />
+  <div style="font-size:8px;">ZATCA QR</div>
+</div>
+<div class="footer">
+  <div>شكراً لتسوقك من ${storeName}</div>
+  <div>Thank you for shopping with us</div>
+  ${store?.invoiceNote ? `<div style="margin-top:3px;">${store.invoiceNote}</div>` : ''}
+</div>
+</body>
+</html>`;
+    const win = window.open('', '_blank', 'width=300,height=600');
+    if (win) {
+      win.document.write(html);
+      win.document.close();
+      win.onload = () => { win.focus(); win.print(); };
+    }
+  };
+
   const handleWhatsApp = () => {
     const phone = (invoice.customerPhone || "").replace(/[^0-9]/g, "");
     if (!phone) { alert("لا يوجد رقم هاتف للعميل"); return; }
@@ -176,6 +270,9 @@ export default function InvoicePrint() {
         </Button>
         <Button onClick={handlePrint} size="sm" className="flex-1 bg-[#1a1a1a] hover:bg-[#333] text-white">
           <Printer className="w-4 h-4 me-1" /> طباعة
+        </Button>
+        <Button onClick={handleThermalPrint} size="sm" className="flex-1 bg-orange-500 hover:bg-orange-600 text-white">
+          <Printer className="w-4 h-4 me-1" /> حرارية 58mm
         </Button>
         <Button onClick={handleWhatsApp} size="sm" className="flex-1 bg-[#25d366] hover:bg-[#1ebe5d] text-white">
           <Share2 className="w-4 h-4 me-1" /> واتساب

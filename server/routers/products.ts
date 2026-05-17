@@ -1,10 +1,11 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
+import { sql } from "drizzle-orm";
 import {
   getProducts, getProductById, getProductByBarcode, createProduct,
   updateProduct, deleteProduct, getProductStock, upsertProductStock,
   setProductStock, addStockMovement, getStockMovements, getWarehouses,
-  reserveBarcodeSerials, getLastBarcodeSerial, getProductVariants,
+  reserveBarcodeSerials, getLastBarcodeSerial, getProductVariants, getDb,
 } from "../db";
 import { protectedProcedure, router } from "../_core/trpc";
 import { nanoid } from "nanoid";
@@ -58,7 +59,18 @@ export const productsRouter = router({
     const { initialStock, ...productData } = input;
     // Generate barcode if not provided
     const barcode = `DM${Date.now()}${Math.floor(Math.random() * 100)}`;
-    const sku = productData.sku || `SKU-${nanoid(8).toUpperCase()}`;
+    // Generate sequential SKU starting from 100001
+    let sku = productData.sku;
+    if (!sku) {
+      const db2 = await getDb();
+      let nextNum = 100001;
+      if (db2) {
+        const rows = await db2.execute(sql`SELECT MAX(CAST(sku AS UNSIGNED)) as maxSku FROM products WHERE sku REGEXP '^[0-9]+$'`);
+        const maxVal = (rows as any)[0]?.[0]?.maxSku;
+        if (maxVal && Number(maxVal) >= 100001) nextNum = Number(maxVal) + 1;
+      }
+      sku = String(nextNum);
+    }
     const id = await createProduct({ ...productData, barcode, sku, images: productData.images || [] } as any);
     if (!id) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
     // Set initial stock
@@ -86,6 +98,7 @@ export const productsRouter = router({
     size: z.string().optional(),
     costPrice: z.string().optional(),
     salePrice: z.string().optional(),
+    sku: z.string().optional(),
     images: z.array(z.string()).optional(),
     lowStockAlert: z.number().optional(),
     isActive: z.boolean().optional(),

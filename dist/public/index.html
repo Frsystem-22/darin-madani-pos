@@ -12,7 +12,6 @@
     <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800&family=Cairo:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
     <script type="module" crossorigin src="/assets/index.js"></script>
     <link rel="stylesheet" crossorigin href="/assets/index.css">
-    <script src="/__manus__/debug-collector.js" defer></script>
   </head>
 
   <body>
@@ -79,8 +78,8 @@ Error generating stack: `+l.message+`
     <div id="root"></div>
     <script
       defer
-      src="https://manus-analytics.com/umami"
-      data-website-id="d8e641ed-620b-4307-b720-4ba3dc80f7d7"></script>
+      src="%VITE_ANALYTICS_ENDPOINT%/umami"
+      data-website-id="%VITE_ANALYTICS_WEBSITE_ID%"></script>
   </body>
 
 </html>
