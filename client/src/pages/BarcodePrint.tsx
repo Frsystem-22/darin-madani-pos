@@ -15,30 +15,16 @@ function sanitizeBarcode(raw: string): string {
   return raw.replace(/[^\x20-\x7E]/g, "").trim() || "0000000000";
 }
 
+// رقم الباركود من قاعدة البيانات مباشرة - جزء واحد فقط
 function buildVariantBarcode(product: any): string {
-  const sku = product.sku || product.barcode || String(product.id).padStart(10, "0");
-  const parts = [sanitizeBarcode(sku)];
-  if (product.colorEn) {
-    parts.push(product.colorEn.slice(0, 3).toUpperCase());
-  } else if (product.color) {
-    const colorMap: Record<string, string> = {
-      "أسود": "BLK", "أبيض": "WHT", "أحمر": "RED", "أزرق": "BLU",
-      "أخضر": "GRN", "أصفر": "YLW", "بنفسجي": "PRP", "وردي": "PNK",
-      "بيج": "BEG", "رمادي": "GRY", "بني": "BRN", "ذهبي": "GLD",
-      "فضي": "SLV", "برتقالي": "ORG",
-    };
-    const code = colorMap[product.color] || product.color.slice(0, 3).replace(/[^\x20-\x7E]/g, "X");
-    parts.push(code);
-  }
-  if (product.size) {
-    const sizeClean = product.size.replace(/[^\x20-\x7E]/g, "").trim();
-    if (sizeClean) parts.push(sizeClean);
-  }
-  return sanitizeBarcode(parts.join("-"));
+  return sanitizeBarcode(
+    String(product.barcode || product.id || "0000000000")
+  );
 }
 
-function buildSerialBarcode(variantBarcode: string, serial: number): string {
-  return sanitizeBarcode(`${variantBarcode}-${String(serial).padStart(3, "0")}`);
+function buildSerialBarcode(variantBarcode: string, _serial: number): string {
+  // نفس رقم الباركود بدون رقم تسلسلي
+  return variantBarcode;
 }
 
 interface SelectedProduct {
@@ -139,31 +125,25 @@ export default function BarcodePrint() {
       const printWindow = window.open("", "_blank");
       if (!printWindow) { toast.error(isAr ? "تعذّر فتح نافذة الطباعة" : "Could not open print window"); return; }
 
-      const labelWidth = labelSize === "58mm" ? "54mm" : labelSize === "60x40mm" ? "58mm" : "76mm";
-      const labelHeight = labelSize === "60x40mm" ? "38mm" : undefined;
+      // مقاس ثابت 60×40mm
+      const labelWidth = "58mm";
+      const labelHeight = "38mm";
       let labelsHtml = "";
       let initScript = "";
       let idx = 0;
 
       for (const { product, serials } of printItems) {
-        const variantBarcode = buildVariantBarcode(product);
-        const productName = isAr ? product.name : (product.nameEn || product.name);
-        const colorText = isAr ? product.color : (product.colorEn || product.color);
+        const barcodeNum = buildVariantBarcode(product);
 
         for (const serial of serials) {
-          const serialBarcode = buildSerialBarcode(variantBarcode, serial);
           const svgId = `bc${idx}`;
           labelsHtml += `
             <div class="label">
-              <div class="store-name">DARIN MADANI</div>
-              <div class="product-name">${productName}</div>
-              ${(colorText || product.size) ? `<div class="detail">${[colorText, product.size].filter(Boolean).join(" · ")}</div>` : ""}
-              <div class="price">${Number(product.salePrice).toLocaleString()} ${currency}</div>
               <svg id="${svgId}" class="barcode-svg"></svg>
-              <div class="barcode-num">${serialBarcode}</div>
+              <div class="barcode-num">${barcodeNum}</div>
             </div>
           `;
-          initScript += `try { JsBarcode(document.getElementById('${svgId}'), '${serialBarcode}', {format:'CODE128',width:1.2,height:28,displayValue:false,margin:2}); } catch(e){}\n`;
+          initScript += `try { JsBarcode(document.getElementById('${svgId}'), '${barcodeNum}', {format:'CODE128',width:2.8,height:55,displayValue:false,margin:4}); } catch(e){}\n`;
           idx++;
         }
       }
@@ -177,14 +157,10 @@ export default function BarcodePrint() {
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: Arial, sans-serif; background: white; }
     .labels-container { display: flex; flex-wrap: wrap; gap: 2mm; padding: 2mm; }
-    .label { width: ${labelWidth}; ${labelHeight ? `height: ${labelHeight}; overflow: hidden;` : ''} border: 0.5px solid #ccc; padding: 2mm 2mm 1mm; display: flex; flex-direction: column; align-items: center; justify-content: center; page-break-inside: avoid; }
-    .store-name { font-size: ${labelHeight ? '7pt' : '6.5pt'}; font-weight: bold; letter-spacing: 1.5px; color: #8B7355; margin-bottom: 0.5mm; }
-    .product-name { font-size: ${labelHeight ? '9pt' : '8pt'}; font-weight: bold; text-align: center; margin-bottom: 0.5mm; line-height: 1.2; }
-    .detail { font-size: ${labelHeight ? '7pt' : '6.5pt'}; color: #555; margin-bottom: 0.5mm; }
-    .price { font-size: ${labelHeight ? '11pt' : '10pt'}; font-weight: bold; color: #8B7355; margin-bottom: 1mm; }
-    .barcode-svg { width: 100%; max-height: ${labelHeight ? '12mm' : '10mm'}; }
-    .barcode-num { font-size: 5.5pt; color: #666; margin-top: 0.5mm; font-family: monospace; letter-spacing: 0.5px; }
-    @media print { body { margin: 0; } .labels-container { gap: 1mm; padding: 1mm; } @page { size: ${labelHeight ? '60mm 40mm' : 'auto'}; margin: 0; } }
+    .label { width: 58mm; height: 38mm; overflow: hidden; border: 0.5px solid #ccc; display: flex; flex-direction: column; align-items: center; justify-content: center; page-break-inside: avoid; }
+    .barcode-svg { width: 95%; }
+    .barcode-num { font-size: 9pt; color: #222; margin-top: 2mm; font-family: monospace; letter-spacing: 1.5px; font-weight: bold; }
+    @media print { body { margin: 0; } .labels-container { gap: 1mm; padding: 1mm; } @page { size: 60mm 40mm; margin: 0; } }
   </style>
 </head>
 <body>
