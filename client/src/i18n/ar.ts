@@ -16,8 +16,8 @@ export default {
   nav: {
     dashboard: "لوحة التحكم", pos: "نقطة البيع", inventory: "المخزون",
     invoices: "الفواتير", returns: "المرتجعات", customers: "العملاء",
-    users: "المستخدمون", settings: "الإعدادات", reports: "التقارير",
-    warehouses: "المستودعات", categories: "التصنيفات", discounts: "الخصومات",
+    users: "المستخدمون", settings: "الإعدادات",
+    warehouses: "المستودعات", categories: "التصنيفات", discounts: "الخصومات", reports: "التقارير",
     stockMovements: "حركة المخزون",
     barcode_print: "طباعة الستيكرات",
   },

@@ -16,8 +16,8 @@ export default {
   nav: {
     dashboard: "Dashboard", pos: "Point of Sale", inventory: "Inventory",
     invoices: "Invoices", returns: "Returns", customers: "Customers",
-    users: "Users", settings: "Settings", reports: "Reports",
-    warehouses: "Warehouses", categories: "Categories", discounts: "Discounts",
+    users: "Users", settings: "Settings",
+    warehouses: "Warehouses", categories: "Categories", discounts: "Discounts", reports: "Reports",
     stockMovements: "Stock Movements",
     barcode_print: "Print Labels",
   },

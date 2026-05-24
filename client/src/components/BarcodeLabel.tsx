@@ -25,18 +25,15 @@ interface BarcodeLabelProps {
 
 /** تنظيف الباركود ليحتوي فقط على أحرف CODE128 صالحة */
 function sanitizeBarcode(raw: string): string {
-  // إزالة أي حرف خارج نطاق ASCII 32-126
   return raw.replace(/[^\x20-\x7E]/g, "").trim() || "0000000000";
 }
 
 /** بناء باركود من SKU + لون + مقاس */
 function buildBarcode(product: BarcodeLabelProps["product"]): string {
   const sku = product.sku || product.barcode || String(product.id).padStart(10, "0");
-  // إذا كان الباركود الموجود يحتوي على عربي، نبني واحداً جديداً من SKU فقط
   const parts = [sku];
   if (product.colorEn) parts.push(product.colorEn.slice(0, 3).toUpperCase());
   else if (product.color) {
-    // تحويل اللون العربي لكود إنجليزي مختصر
     const colorMap: Record<string, string> = {
       "أسود": "BLK", "أبيض": "WHT", "أحمر": "RED", "أزرق": "BLU",
       "أخضر": "GRN", "أصفر": "YLW", "بنفسجي": "PRP", "وردي": "PNK",
@@ -56,24 +53,21 @@ function buildBarcode(product: BarcodeLabelProps["product"]): string {
 export default function BarcodeLabel({ product, onClose }: BarcodeLabelProps) {
   const { t, i18n } = useTranslation();
   const isAr = i18n.language === "ar";
-  const currency = isAr ? "ر.س" : "SAR";
   const [copies, setCopies] = useState(1);
   const [labelSize, setLabelSize] = useState<"58mm" | "80mm">("58mm");
   const svgRef = useRef<SVGSVGElement>(null);
 
   const barcode = buildBarcode(product);
-  const displayBarcode = barcode;
 
   useEffect(() => {
     if (svgRef.current) {
       try {
         JsBarcode(svgRef.current, barcode, {
           format: "CODE128",
-          width: 1.5,
-          height: 40,
-          displayValue: true,
-          fontSize: 10,
-          margin: 4,
+          width: 2.5,
+          height: 70,
+          displayValue: false,
+          margin: 6,
           background: "#ffffff",
           lineColor: "#000000",
         });
@@ -88,27 +82,21 @@ export default function BarcodeLabel({ product, onClose }: BarcodeLabelProps) {
     if (!printWindow) return;
 
     const labelWidth = labelSize === "58mm" ? "54mm" : "76mm";
-    const productName = isAr ? product.name : (product.nameEn || product.name);
-    const colorText = isAr ? product.color : (product.colorEn || product.color);
 
     const labelsHtml = Array.from({ length: copies }).map((_, i) => `
       <div class="label">
-        <div class="store-name">DARIN MADANI</div>
-        <div class="product-name">${productName}</div>
-        ${(colorText || product.size) ? `<div class="detail">${[colorText, product.size].filter(Boolean).join(" · ")}</div>` : ""}
-        <div class="price">${Number(product.salePrice).toLocaleString()} ${currency}</div>
         <svg id="bc${i}" class="barcode-svg"></svg>
-        <div class="barcode-num">${displayBarcode}</div>
+        <div class="barcode-num">${barcode}</div>
       </div>
     `).join("");
 
     const initScript = Array.from({ length: copies }).map((_, i) => `
-      try { JsBarcode(document.getElementById('bc${i}'), '${barcode}', {format:'CODE128',width:1.2,height:28,displayValue:false,margin:2}); } catch(e){}
+      try { JsBarcode(document.getElementById('bc${i}'), '${barcode}', {format:'CODE128',width:2.2,height:55,displayValue:false,margin:4}); } catch(e){}
     `).join("\n");
 
     printWindow.document.write(`
       <!DOCTYPE html>
-      <html dir="${isAr ? "rtl" : "ltr"}">
+      <html>
       <head>
         <meta charset="UTF-8">
         <title>Barcode Labels</title>
@@ -120,18 +108,14 @@ export default function BarcodeLabel({ product, onClose }: BarcodeLabelProps) {
           .label {
             width: ${labelWidth};
             border: 0.5px solid #ccc;
-            padding: 2mm 2mm 1mm;
+            padding: 2mm;
             display: flex;
             flex-direction: column;
             align-items: center;
             page-break-inside: avoid;
           }
-          .store-name { font-size: 6.5pt; font-weight: bold; letter-spacing: 1.5px; color: #8B7355; margin-bottom: 0.5mm; }
-          .product-name { font-size: 8pt; font-weight: bold; text-align: center; margin-bottom: 0.5mm; line-height: 1.2; }
-          .detail { font-size: 6.5pt; color: #555; margin-bottom: 0.5mm; }
-          .price { font-size: 10pt; font-weight: bold; color: #8B7355; margin-bottom: 1mm; }
-          .barcode-svg { width: 100%; max-height: 10mm; }
-          .barcode-num { font-size: 5.5pt; color: #666; margin-top: 0.5mm; font-family: monospace; letter-spacing: 0.5px; }
+          .barcode-svg { width: 100%; }
+          .barcode-num { font-size: 8pt; color: #333; margin-top: 1.5mm; font-family: monospace; letter-spacing: 1px; font-weight: bold; }
           @media print {
             body { margin: 0; }
             .labels-container { gap: 1mm; padding: 1mm; }
@@ -159,23 +143,10 @@ export default function BarcodeLabel({ product, onClose }: BarcodeLabelProps) {
           <DialogTitle>{t("inventory.barcode")}</DialogTitle>
         </DialogHeader>
 
-        {/* Preview */}
+        {/* Preview - باركود فقط مع الرقم */}
         <div className="border border-border rounded-lg p-4 bg-white flex flex-col items-center gap-1">
-          <p className="text-[10px] font-bold tracking-widest text-amber-700">DARIN MADANI</p>
-          <p className="text-sm font-bold text-gray-900 text-center">
-            {isAr ? product.name : (product.nameEn || product.name)}
-          </p>
-          {(product.color || product.size) && (
-            <p className="text-xs text-gray-500">
-              {isAr ? product.color : (product.colorEn || product.color)}
-              {product.size && ` · ${product.size}`}
-            </p>
-          )}
-          <p className="text-base font-bold text-amber-700">
-            {Number(product.salePrice).toLocaleString()} {currency}
-          </p>
-          <svg ref={svgRef} className="w-full max-h-14" />
-          <p className="text-[10px] font-mono text-gray-500 mt-0.5">{displayBarcode}</p>
+          <svg ref={svgRef} className="w-full" style={{minHeight:'80px'}} />
+          <p className="text-[10px] font-mono text-gray-600 mt-0.5">{barcode}</p>
         </div>
 
         <div className="grid grid-cols-2 gap-3">

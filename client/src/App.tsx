@@ -17,6 +17,9 @@ import Users from "./pages/Users";
 import Settings from "./pages/Settings";
 import InvoicePrint from "./pages/InvoicePrint";
 import BarcodePrint from "./pages/BarcodePrint";
+import PaymentSuccess from "./pages/PaymentSuccess";
+import PaymentPage from "@/pages/PaymentPage";
+import Reports from "@/pages/Reports";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { isAuthenticated, loading } = useAuth();
@@ -57,6 +60,9 @@ function Router() {
       <Route path="/barcode-print" component={() => <ProtectedRoute component={BarcodePrint} />} />
       <Route path="/warehouses" component={() => <ProtectedRoute component={Settings} />} />
       <Route path="/discounts" component={() => <ProtectedRoute component={Settings} />} />
+      <Route path="/reports" component={() => <ProtectedRoute component={Reports} />} />
+      <Route path="/payment-success" component={PaymentSuccess} />
+      <Route path="/pay" component={PaymentPage} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>

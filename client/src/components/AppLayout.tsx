@@ -51,6 +51,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     { key: "customers", icon: <Users size={18} />, path: "/customers" },
     { key: "warehouses", icon: <Warehouse size={18} />, path: "/warehouses", roles: ["admin", "manager"] },
     { key: "discounts", icon: <Tag size={18} />, path: "/discounts", roles: ["admin", "manager"] },
+    { key: "reports", icon: <BarChart3 size={18} />, path: "/reports", roles: ["admin", "manager"] },
     { key: "users", icon: <Layers size={18} />, path: "/users", roles: ["admin"] },
     { key: "settings", icon: <Settings size={18} />, path: "/settings", roles: ["admin"] },
   ];

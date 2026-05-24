@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { CheckCircle, Zap, MessageCircle } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
+import { QRCodeSVG } from "qrcode.react";
 
 interface OnlinePaymentDialogProps {
   open: boolean;
@@ -14,6 +15,8 @@ interface OnlinePaymentDialogProps {
   invoiceId?: number | null;
   qrUrl: string | null;
   paymentUrl: string | null;
+  /** رابط MyFatoorah الأصلي - يُستخدم كـ fallback */
+  mfPaymentUrl?: string | null;
   status: "waiting" | "paid" | "failed";
   onStatusChange: (status: "waiting" | "paid" | "failed") => void;
   /** Called when payment confirmed - should clear cart and show success */
@@ -28,9 +31,11 @@ interface OnlinePaymentDialogProps {
 }
 
 export default function OnlinePaymentDialog({
-  open, onOpenChange, token, invoiceId, qrUrl, paymentUrl, status, onStatusChange,
+  open, onOpenChange, token, invoiceId, qrUrl, paymentUrl, mfPaymentUrl, status, onStatusChange,
   onPaidConfirmed, customerName, customerPhone, settings, isAr, total,
 }: OnlinePaymentDialogProps) {
+  // رابط QR: نعرض رابط صفحة الدفع بهوية المتجر (أو MF مباشرة كـ fallback)
+  const qrValue = paymentUrl || mfPaymentUrl || "";
   const utils = trpc.useUtils();
 
   // ── NEW FLOW: poll payment_requests by token ──────────────────────────────
@@ -82,14 +87,15 @@ export default function OnlinePaymentDialog({
       return;
     }
     const storeName = settings?.storeName || "Darin Madani";
-    const msg = `مرحباً *${customerName || ""}*\n\nتفضل اضغط على الرابط أدناه لإتمام سداد فاتورتك من *${storeName}*\n\nالمبلغ: ${total?.toFixed(2) || ""} ر.س\n\nرابط الدفع:\n${paymentUrl}`;
+    const linkToSend = paymentUrl || mfPaymentUrl || "";
+    const msg = `مرحباً *${customerName || ""}*\n\nتفضل اضغط على الرابط أدناه لإتمام سداد فاتورتك من *${storeName}*\n\nالمبلغ: ${total?.toFixed(2) || ""} ر.س\n\nرابط الدفع:\n${linkToSend}`;
     const formattedPhone = phone.replace(/\D/g, "").replace(/^0/, "966");
     try {
       await sendWhatsAppMsg.mutateAsync({ phone: formattedPhone, message: msg });
       toast.success(isAr ? "تم إرسال رابط الدفع عبر الواتساب" : "Payment link sent via WhatsApp");
     } catch {
       // Fallback: open WhatsApp web
-      const msgEncoded = encodeURIComponent(`رابط الدفع:\n${paymentUrl}`);
+      const msgEncoded = encodeURIComponent(`رابط الدفع:\n${linkToSend}`);
       window.open(`https://wa.me/${formattedPhone}?text=${msgEncoded}`, "_blank");
     }
   };
@@ -138,10 +144,15 @@ export default function OnlinePaymentDialog({
                 </div>
               )}
 
-              {/* QR Code from MyFatoorah */}
-              {qrUrl ? (
-                <div className="border-4 border-primary/20 rounded-xl p-2 bg-white">
-                  <img src={qrUrl} alt="QR Code" className="w-48 h-48 object-contain" />
+              {/* QR Code - generated from paymentUrl (صفحة الدفع بهوية المتجر) */}
+              {qrValue ? (
+                <div className="border-4 border-primary/20 rounded-xl p-3 bg-white">
+                  <QRCodeSVG
+                    value={qrValue}
+                    size={192}
+                    level="M"
+                    includeMargin={false}
+                  />
                 </div>
               ) : (
                 <div className="w-48 h-48 border-2 border-dashed border-muted-foreground/30 rounded-xl flex items-center justify-center">
@@ -152,15 +163,15 @@ export default function OnlinePaymentDialog({
                 </div>
               )}
 
-              {/* Payment link */}
-              {paymentUrl && (
+              {/* Payment link - رابط صفحة الدفع بهوية المتجر */}
+              {(paymentUrl || mfPaymentUrl) && (
                 <a
-                  href={paymentUrl}
+                  href={paymentUrl || mfPaymentUrl || ""}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-xs text-primary underline break-all max-w-full"
                 >
-                  {isAr ? "فتح رابط الدفع" : "Open payment link"}
+                  {isAr ? "فتح صفحة الدفع" : "Open payment page"}
                 </a>
               )}
 
