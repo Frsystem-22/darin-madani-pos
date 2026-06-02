@@ -23,13 +23,7 @@ export default function Invoices() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
-  const [selectedInvoiceId, setSelectedInvoiceId] = useState<number | null>(null);
   const [showDetail, setShowDetail] = useState(false);
-
-  const { data: fullInvoice } = trpc.invoices.get.useQuery(
-    { id: selectedInvoiceId! },
-    { enabled: !!selectedInvoiceId }
-  );
 
   const { data: invoices, refetch } = trpc.invoices.list.useQuery(
     {
@@ -109,22 +103,22 @@ export default function Invoices() {
         <title>Invoice ${invoice.invoiceNumber}</title>
         <style>
           * { margin: 0; padding: 0; box-sizing: border-box; }
-          body { font-family: 'Arial', sans-serif; font-size: 11px; width: 80mm; margin: 0 auto; background: #fff; color: #000; }
+          body { font-family: 'Arial', 'Tahoma', sans-serif; font-size: 14px; width: 80mm; margin: 0 auto; background: #fff; color: #000; }
           .header { text-align: center; padding: 4mm 0; border-bottom: 1px dashed #000; }
           .logo { max-width: 35mm; max-height: 14mm; object-fit: contain; margin-bottom: 3px; }
-          .store-name { font-size: 14px; font-weight: bold; letter-spacing: 1px; }
-          .sub { font-size: 9px; color: #555; }
+          .store-name { font-size: 17px; font-weight: bold; letter-spacing: 1px; }
+          .sub { font-size: 12px; color: #333; }
           .section { padding: 2mm 0; border-bottom: 1px dashed #000; }
           .row { display: flex; justify-content: space-between; margin: 1mm 0; }
           .items-table { width: 100%; border-collapse: collapse; margin: 2mm 0; }
-          .items-table th, .items-table td { padding: 1mm; font-size: 10px; }
+          .items-table th, .items-table td { padding: 2mm 1mm; font-size: 13px; }
           .items-table th { border-bottom: 1px solid #000; font-weight: bold; }
-          .total-row { font-weight: bold; font-size: 13px; }
+          .total-row { font-weight: bold; font-size: 16px; }
           .qr-section { display: flex; align-items: flex-start; gap: 3mm; padding: 2mm 0; border-bottom: 1px dashed #000; }
           .qr-img { width: 22mm; height: 22mm; flex-shrink: 0; }
-          .qr-label { font-size: 8px; color: #666; text-align: center; margin-top: 1px; }
+          .qr-label { font-size: 12px; color: #444; text-align: center; margin-top: 2px; }
           .totals-block { flex: 1; }
-          .footer { text-align: center; padding: 3mm 0; font-size: 9px; color: #555; }
+          .footer { text-align: center; padding: 3mm 0; font-size: 13px; font-weight: bold; color: #222; }
           @media print { body { margin: 0; } }
         </style>
       </head>
@@ -256,7 +250,7 @@ export default function Invoices() {
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1">
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setSelectedInvoice(inv); setSelectedInvoiceId(inv.id); setShowDetail(true); }}>
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setSelectedInvoice(inv); setShowDetail(true); }}>
                         <Eye size={13} />
                       </Button>
                       <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handlePrint(inv)}>
@@ -291,31 +285,29 @@ export default function Invoices() {
               {selectedInvoice?.invoiceNumber}
             </DialogTitle>
           </DialogHeader>
-          {(fullInvoice || selectedInvoice) && (
+          {selectedInvoice && (
             <div className="space-y-4">
               {/* Invoice meta */}
-              {(() => { const inv = fullInvoice || selectedInvoice; return (
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div>
-                  <p className="text-muted-foreground">{isAr ? "اسم العميل" : "Customer"}</p>
-                  <p className="font-medium">{inv.customerName || (isAr ? "عميل عابر" : "Walk-in")}</p>
+                  <p className="text-muted-foreground">{t("customers.name")}</p>
+                  <p className="font-medium">{selectedInvoice.customerName || (isAr ? "عميل عابر" : "Walk-in")}</p>
                 </div>
-                {inv.customerPhone && (
+                {selectedInvoice.customerPhone && (
                   <div>
                     <p className="text-muted-foreground">{t("customers.phone")}</p>
-                    <p className="font-medium">{inv.customerPhone}</p>
+                    <p className="font-medium">{selectedInvoice.customerPhone}</p>
                   </div>
                 )}
                 <div>
                   <p className="text-muted-foreground">{t("common.date")}</p>
-                  <p className="font-medium">{format(new Date(inv.createdAt), "dd/MM/yyyy HH:mm", { locale })}</p>
+                  <p className="font-medium">{format(new Date(selectedInvoice.createdAt), "dd/MM/yyyy HH:mm", { locale })}</p>
                 </div>
                 <div>
                   <p className="text-muted-foreground">{t("pos.paymentMethod")}</p>
-                  <p className="font-medium">{paymentLabel(inv.paymentMethod)}</p>
+                  <p className="font-medium">{paymentLabel(selectedInvoice.paymentMethod)}</p>
                 </div>
               </div>
-              ); })()}
 
               <Separator />
 
@@ -331,7 +323,7 @@ export default function Invoices() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {((fullInvoice?.items || selectedInvoice?.items) || []).map((item: any, i: number) => (
+                  {(selectedInvoice.items || []).map((item: any, i: number) => (
                     <TableRow key={i}>
                       <TableCell className="text-sm font-medium">{isAr ? item.productName : (item.productNameEn || item.productName)}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">{item.color}{item.size && ` · ${item.size}`}</TableCell>
@@ -349,23 +341,23 @@ export default function Invoices() {
               <div className="space-y-1.5 text-sm">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">{t("common.subtotal")}</span>
-                  <span>{Number((fullInvoice || selectedInvoice).subtotal).toLocaleString()} {currency}</span>
+                  <span>{Number(selectedInvoice.subtotal).toLocaleString()} {currency}</span>
                 </div>
-                {Number((fullInvoice || selectedInvoice).discountAmount) > 0 && (
+                {Number(selectedInvoice.discountAmount) > 0 && (
                   <div className="flex justify-between text-green-600">
                     <span>{t("common.discount")}</span>
-                    <span>- {Number((fullInvoice || selectedInvoice).discountAmount).toLocaleString()} {currency}</span>
+                    <span>- {Number(selectedInvoice.discountAmount).toLocaleString()} {currency}</span>
                   </div>
                 )}
-                {Number((fullInvoice || selectedInvoice).taxAmount) > 0 && (
+                {Number(selectedInvoice.taxAmount) > 0 && (
                   <div className="flex justify-between text-muted-foreground">
-                    <span>{t("common.tax")} ({(fullInvoice || selectedInvoice).taxRate}%)</span>
-                    <span>{Number((fullInvoice || selectedInvoice).taxAmount).toLocaleString()} {currency}</span>
+                    <span>{t("common.tax")} ({selectedInvoice.taxRate}%)</span>
+                    <span>{Number(selectedInvoice.taxAmount).toLocaleString()} {currency}</span>
                   </div>
                 )}
                 <div className="flex justify-between font-bold text-base border-t border-border pt-1.5">
                   <span>{t("common.total")}</span>
-                  <span className="text-primary">{Number((fullInvoice || selectedInvoice).total).toLocaleString()} {currency}</span>
+                  <span className="text-primary">{Number(selectedInvoice.total).toLocaleString()} {currency}</span>
                 </div>
               </div>
             </div>
